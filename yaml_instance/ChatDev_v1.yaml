@@ -38,14 +38,14 @@ graph:
     - id: Programmer Code Review
       type: agent
       config:
-        name: gemini-3-flash-preview
+        name: nvidia/nemotron-3-super-120b-a12b:free
         role: |-
           ${COMMON_PROMPT}
           You are Programmer. we are both working at ChatDev. We share a common interest in collaborating to successfully complete a task assigned by a new customer.
           You can write/create computer software or applications by providing a specific programming language to the computer. You have extensive computing and coding experience in many varieties of programming languages and platforms, such as Python, Java, C, C++, HTML, CSS, JavaScript, XML, SQL, PHP, etc,.
           You will receive the task from user.
           To complete the task, you must call the functions to save or edit the codes that appropriately solves the requested instruction based on your expertise and customer's needs.
-        provider: Google Gemini
+        provider: openrouter
         base_url: ${BASE_URL}
         api_key: ${API_KEY}
         params: {}
@@ -62,23 +62,23 @@ graph:
                 - name: search_in_files
                 - name: save_file
                 - name: list_directory
-              timeout: null
-        thinking: null
+              timeout:
+        thinking:
         memories: []
-        retry: null
+        retry:
       description: ''
       context_window: -1
     - id: Programmer Test Modification
       type: agent
       config:
-        name: gemini-3-flash-preview
+        name: nvidia/nemotron-3-super-120b-a12b:free
         role: |-
           ${COMMON_PROMPT}
           You are Programmer. we are both working at ChatDev. We share a common interest in collaborating to successfully complete a task assigned by a new customer.
           You can write/create computer software or applications by providing a specific programming language to the computer. You have extensive computing and coding experience in many varieties of programming languages and platforms, such as Python, Java, C, C++, HTML, CSS, JavaScript, XML, SQL, PHP, etc,.
           You will receive the task from user.
           To complete the task, you must call the functions to save or edit the codes that appropriately solves the requested instruction based on your expertise and customer's needs.
-        provider: Google Gemini
+        provider: openrouter
         base_url: ${BASE_URL}
         api_key: ${API_KEY}
         params: {}
@@ -95,17 +95,17 @@ graph:
                 - name: search_in_files
                 - name: save_file
                 - name: list_directory
-              timeout: null
-        thinking: null
+              timeout:
+        thinking:
         memories: []
-        retry: null
+        retry:
       description: ''
       context_window: -1
     - id: Chief Executive Officer
       type: agent
       config:
-        name: gemini-3-flash-preview
-        provider: Google Gemini
+        name: nvidia/nemotron-3-super-120b-a12b:free
+        provider: openrouter
         role: |-
           ${COMMON_PROMPT}
           You are Chief Executive Officer. Now, we are both working at ChatDev and we share a common interest in collaborating to successfully complete a task assigned by a new customer.
@@ -128,10 +128,10 @@ graph:
                 - name: search_in_files
                 - name: save_file
                 - name: list_directory
-              timeout: null
-        thinking: null
+              timeout:
+        thinking:
         memories: []
-        retry: null
+        retry:
       description: ''
       context_window: 0
     - id: Code Review Comment Phase Prompt for Assistant
@@ -166,8 +166,8 @@ graph:
     - id: Programmer Code Complete
       type: agent
       config:
-        name: gemini-3-flash-preview
-        provider: Google Gemini
+        name: nvidia/nemotron-3-super-120b-a12b:free
+        provider: openrouter
         role: |-
           ${COMMON_PROMPT}
           You are Programmer. we are both working at ChatDev. We share a common interest in collaborating to successfully complete a task assigned by a new customer.
@@ -190,10 +190,10 @@ graph:
                 - name: search_in_files
                 - name: save_file
                 - name: list_directory
-              timeout: null
-        thinking: null
+              timeout:
+        thinking:
         memories: []
-        retry: null
+        retry:
       description: ''
       context_window: 0
     - id: Code Complete Phase for Assistant
@@ -209,6 +209,39 @@ graph:
           As the Programmer, to satisfy the complete function of our developed software, you have to implement all methods in the unimplemented files which contains a unimplemented class. Now, implement all methods of the unimplemented files and all other codes needed.
           If you find all the files are fully implemented, output "<INFO> FINISHED"
         role: user
+      description: ''
+      context_window: 0
+    - id: Programmer Coding
+      type: agent
+      config:
+        name: nvidia/nemotron-3-super-120b-a12b:free
+        provider: openrouter
+        role: |-
+          ${COMMON_PROMPT}
+          You are Programmer. we are both working at ChatDev. We share a common interest in collaborating to successfully complete a task assigned by a new customer.
+          You can write/create computer software or applications by providing a specific programming language to the computer. You have extensive computing and coding experience in many varieties of programming languages and platforms, such as Python, Java, C, C++, HTML, CSS, JavaScript, XML, SQL, PHP, etc,.
+          You will receive the task from user.
+          To complete the task, you must call the functions to save or edit the codes that appropriately solves the requested instruction based on your expertise and customer's needs.
+        base_url: ${BASE_URL}
+        api_key: ${API_KEY}
+        params: {}
+        tooling:
+          - type: function
+            config:
+              tools:
+                - name: uv_related:All
+                - name: apply_text_edits
+                - name: create_folder
+                - name: describe_available_files
+                - name: delete_path
+                - name: read_file_segment
+                - name: search_in_files
+                - name: save_file
+                - name: list_directory
+              timeout:
+        thinking:
+        memories: []
+        retry:
       description: ''
       context_window: 0
     - id: Test Error Summary Phase Prompt for Assistant
@@ -232,8 +265,8 @@ graph:
     - id: Chief Product Officer
       type: agent
       config:
-        name: gemini-3-flash-preview
-        provider: Google Gemini
+        name: nvidia/nemotron-3-super-120b-a12b:free
+        provider: openrouter
         role: |-
           ${COMMON_PROMPT}
           You are Chief Product Officer. we are both working at ChatDev. We share a common interest in collaborating to successfully complete a task assigned by a new customer.
@@ -255,10 +288,10 @@ graph:
                 - name: search_in_files
                 - name: save_file
                 - name: list_directory
-              timeout: null
-        thinking: null
+              timeout:
+        thinking:
         memories: []
-        retry: null
+        retry:
       description: ''
       context_window: -1
     - id: Manual Phase Prompt for Assistant
@@ -290,8 +323,8 @@ graph:
     - id: Programmer Test Error Summary
       type: agent
       config:
-        name: gemini-3-flash-preview
-        provider: Google Gemini
+        name: nvidia/nemotron-3-super-120b-a12b:free
+        provider: openrouter
         role: |-
           ${COMMON_PROMPT}
           You are Programmer. we are both working at ChatDev. We share a common interest in collaborating to successfully complete a task assigned by a new customer.
@@ -310,10 +343,10 @@ graph:
                 - name: read_file_segment
                 - name: search_in_files
                 - name: list_directory
-              timeout: null
-        thinking: null
+              timeout:
+        thinking:
         memories: []
-        retry: null
+        retry:
       description: ''
       context_window: -1
     - id: Manual Phase Loop Counter
@@ -327,8 +360,8 @@ graph:
     - id: Code Reviewer
       type: agent
       config:
-        name: gemini-3-flash-preview
-        provider: Google Gemini
+        name: nvidia/nemotron-3-super-120b-a12b:free
+        provider: openrouter
         role: |-
           ${COMMON_PROMPT}
           You are Code Reviewer. we are both working at ChatDev. We share a common interest in collaborating to successfully complete a task assigned by a new customer.
@@ -346,10 +379,10 @@ graph:
                 - name: read_file_segment
                 - name: search_in_files
                 - name: list_directory
-              timeout: null
-        thinking: null
+              timeout:
+        thinking:
         memories: []
-        retry: null
+        retry:
       description: ''
       context_window: -1
     - id: Code Review Modification Phase Prompt for Assistant
@@ -425,8 +458,8 @@ graph:
     - id: Software Test Engineer
       type: agent
       config:
-        name: gemini-3-flash-preview
-        provider: Google Gemini
+        name: nvidia/nemotron-3-super-120b-a12b:free
+        provider: openrouter
         role: |-
           ${COMMON_PROMPT}
           You are Software Test Engineer. we are both working at ChatDev. We share a common interest in collaborating to successfully complete a task assigned by a new customer.
@@ -455,10 +488,10 @@ graph:
                 - name: search_in_files
                 - name: save_file
                 - name: list_directory
-              timeout: null
-        thinking: null
+              timeout:
+        thinking:
         memories: []
-        retry: null
+        retry:
       description: ''
       context_window: -1
     - id: Code Review Phase Loop Counter
@@ -469,41 +502,6 @@ graph:
         message: ''
       description: ''
       context_window: 0
-    - id: Programmer Coding
-      type: agent
-      config:
-        name: gemini-3-flash-preview
-        provider: gemini
-        role: |-
-          ${COMMON_PROMPT}
-          You are Programmer. we are both working at ChatDev. We share a common interest in collaborating to successfully complete a task assigned by a new customer.
-          You can write/create computer software or applications by providing a specific programming language to the computer. You have extensive computing and coding experience in many varieties of programming languages and platforms, such as Python, Java, C, C++, HTML, CSS, JavaScript, XML, SQL, PHP, etc,.
-          You will receive the task from user.
-          To complete the task, you must call the functions to save or edit the codes that appropriately solves the requested instruction based on your expertise and customer's needs.
-        base_url: ${BASE_URL}
-        api_key: ${API_KEY}
-        params: {}
-        tooling:
-          - type: function
-            config:
-              tools:
-                - name: uv_related:All
-                - name: apply_text_edits
-                - name: create_folder
-                - name: describe_available_files
-                - name: delete_path
-                - name: read_file_segment
-                - name: search_in_files
-                - name: save_file
-                - name: list_directory
-              timeout: null
-        thinking: null
-        memories: []
-        skills: null
-        retry: null
-      description: ''
-      context_window: 0
-      log_output: true
   edges:
     - from: Coding Phase Prompt for Assistant
       to: Programmer Coding
@@ -511,35 +509,35 @@ graph:
       condition: 'true'
       carry_data: true
       keep_message: false
-      process: null
+      process:
     - from: Programmer Coding
       to: Code Complete Phase for Assistant
       trigger: true
       condition: 'true'
       carry_data: false
       keep_message: false
-      process: null
+      process:
     - from: Programmer Code Complete
       to: Code Complete All Phase Loop Counter
       trigger: true
       condition: 'true'
       carry_data: false
       keep_message: false
-      process: null
+      process:
     - from: Code Complete All Phase Loop Counter
       to: Code Complete Phase for Assistant
       trigger: true
       condition: 'true'
       carry_data: false
       keep_message: false
-      process: null
+      process:
     - from: Programmer Code Complete
       to: Code Complete Phase for Assistant
       trigger: true
       condition: 'true'
       carry_data: false
       keep_message: false
-      process: null
+      process:
     - from: Code Complete All Phase Loop Counter
       to: Code Review Comment Phase Prompt for Assistant
       trigger: true
@@ -548,7 +546,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Code Reviewer
       to: Code Review Modification Phase Prompt for Assistant
       trigger: true
@@ -557,7 +555,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Code Reviewer
       to: Programmer Code Review
       trigger: false
@@ -566,7 +564,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Programmer Code Review
       to: Code Review Comment Phase Prompt for Assistant
       trigger: true
@@ -575,7 +573,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Programmer Code Review
       to: Code Review Phase Loop Counter
       trigger: true
@@ -584,7 +582,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Code Review Phase Loop Counter
       to: Code Review Comment Phase Prompt for Assistant
       trigger: true
@@ -593,7 +591,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Code Review Comment Phase Prompt for Assistant
       to: Programmer Code Review
       trigger: false
@@ -602,7 +600,7 @@ graph:
       keep_message: false
       clear_context: true
       clear_kept_context: false
-      process: null
+      process:
     - from: Test Error Summary Phase Prompt for Assistant
       to: Programmer Test Error Summary
       trigger: true
@@ -611,7 +609,7 @@ graph:
       keep_message: false
       clear_context: true
       clear_kept_context: false
-      process: null
+      process:
     - from: Test Error Summary Phase Prompt for Assistant
       to: Programmer Test Modification
       trigger: false
@@ -620,7 +618,7 @@ graph:
       keep_message: false
       clear_context: true
       clear_kept_context: false
-      process: null
+      process:
     - from: Programmer Test Error Summary
       to: Programmer Test Modification
       trigger: false
@@ -629,7 +627,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Code Review Phase Loop Counter
       to: Test Error Summary Phase Prompt for Assistant
       trigger: true
@@ -638,7 +636,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Programmer Test Error Summary
       to: Test Modification Phase Prompt for Assistant
       trigger: true
@@ -647,7 +645,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Code Review Modification Phase Prompt for Assistant
       to: Programmer Code Review
       trigger: true
@@ -656,7 +654,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Test Phase Loop Counter
       to: Test Error Summary Phase Prompt for Assistant
       trigger: true
@@ -665,7 +663,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Programmer Test Modification
       to: Software Test Engineer
       trigger: true
@@ -674,7 +672,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Software Test Engineer
       to: Test Modification Phase Loop Counter
       trigger: true
@@ -683,7 +681,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Software Test Engineer
       to: Programmer Test Modification
       trigger: true
@@ -692,7 +690,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Test Modification Phase Loop Counter
       to: Programmer Test Modification
       trigger: true
@@ -701,7 +699,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Test Modification Phase Loop Counter
       to: PSEUDO
       trigger: true
@@ -710,7 +708,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Programmer Test Modification
       to: PSEUDO
       trigger: true
@@ -726,7 +724,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Software Test Engineer
       to: PSEUDO
       trigger: true
@@ -742,7 +740,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: USER
       to: Programmer Coding
       trigger: false
@@ -751,7 +749,7 @@ graph:
       keep_message: true
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: USER
       to: Programmer Code Complete
       trigger: false
@@ -760,7 +758,7 @@ graph:
       keep_message: true
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: USER
       to: Code Reviewer
       trigger: false
@@ -769,7 +767,7 @@ graph:
       keep_message: true
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: USER
       to: Programmer Code Review
       trigger: false
@@ -778,7 +776,7 @@ graph:
       keep_message: true
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: USER
       to: Programmer Test Error Summary
       trigger: false
@@ -787,7 +785,7 @@ graph:
       keep_message: true
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: USER
       to: Software Test Engineer
       trigger: false
@@ -796,7 +794,7 @@ graph:
       keep_message: true
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: USER
       to: Programmer Test Modification
       trigger: false
@@ -805,7 +803,7 @@ graph:
       keep_message: true
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Code Complete Phase for Assistant
       to: Programmer Code Complete
       trigger: true
@@ -814,7 +812,7 @@ graph:
       keep_message: false
       clear_context: true
       clear_kept_context: false
-      process: null
+      process:
     - from: Code Review Comment Phase Prompt for Assistant
       to: Code Reviewer
       trigger: true
@@ -823,7 +821,7 @@ graph:
       keep_message: false
       clear_context: true
       clear_kept_context: false
-      process: null
+      process:
     - from: PSEUDO
       to: Test Error Summary Phase Prompt for Assistant
       trigger: true
@@ -832,7 +830,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: PSEUDO
       to: Test Phase Loop Counter
       trigger: true
@@ -841,7 +839,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Programmer Test Error Summary
       to: Test Modification Phase Prompt for User
       trigger: true
@@ -850,7 +848,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Manual Phase Prompt for User
       to: Chief Executive Officer
       trigger: false
@@ -859,7 +857,7 @@ graph:
       keep_message: false
       clear_context: true
       clear_kept_context: false
-      process: null
+      process:
     - from: Manual Phase Prompt for Assistant
       to: Chief Product Officer
       trigger: true
@@ -868,7 +866,7 @@ graph:
       keep_message: false
       clear_context: true
       clear_kept_context: false
-      process: null
+      process:
     - from: USER
       to: Chief Executive Officer
       trigger: false
@@ -877,7 +875,7 @@ graph:
       keep_message: true
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: USER
       to: Chief Product Officer
       trigger: false
@@ -886,7 +884,7 @@ graph:
       keep_message: true
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Chief Product Officer
       to: Chief Executive Officer
       trigger: true
@@ -895,7 +893,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Manual Phase Loop Counter
       to: FINAL
       trigger: true
@@ -904,7 +902,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: PSEUDO
       to: Manual Phase Prompt for User
       trigger: true
@@ -913,7 +911,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: PSEUDO
       to: Manual Phase Prompt for Assistant
       trigger: true
@@ -922,7 +920,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Code Reviewer
       to: Test Error Summary Phase Prompt for Assistant
       trigger: true
@@ -938,7 +936,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Programmer Code Complete
       to: Code Review Comment Phase Prompt for Assistant
       trigger: true
@@ -954,7 +952,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Chief Executive Officer
       to: Manual Phase Loop Counter
       trigger: true
@@ -963,7 +961,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Chief Executive Officer
       to: Chief Product Officer
       trigger: true
@@ -972,7 +970,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Manual Phase Loop Counter
       to: Chief Product Officer
       trigger: true
@@ -981,7 +979,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Test Modification Phase Prompt for Assistant
       to: Programmer Test Modification
       trigger: true
@@ -990,7 +988,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Test Modification Phase Prompt for User
       to: Software Test Engineer
       trigger: false
@@ -999,7 +997,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
     - from: Test Error Summary Phase Prompt for Assistant
       to: Software Test Engineer
       trigger: false
@@ -1008,7 +1006,7 @@ graph:
       keep_message: false
       clear_context: true
       clear_kept_context: false
-      process: null
+      process:
   memory: []
   initial_instruction: ''
   start:
@@ -1016,4 +1014,8 @@ graph:
     - Coding Phase Prompt for Assistant
   end: []
 vars:
-  COMMON_PROMPT: ChatDev is a software company powered by multiple intelligent agents, such as chief executive officer, chief human resources officer, chief product officer, chief technology officer, etc, with a multi-agent organizational structure and the mission of \"changing the digital world through programming\".
+  COMMON_PROMPT: ChatDev is a software company powered by multiple intelligent 
+    agents, such as chief executive officer, chief human resources officer, 
+    chief product officer, chief technology officer, etc, with a multi-agent 
+    organizational structure and the mission of \"changing the digital world 
+    through programming\".

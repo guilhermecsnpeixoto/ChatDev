@@ -1,9 +1,40 @@
 graph:
   id: ChatDev_v1
-  description: ChatDev multi-agent software development workflow with planning, coding, review, and testing loops.
+  description: ChatDev multi-agent software development workflow with Client Liaison, planning, coding, review, and testing loops.
   log_level: DEBUG
   is_majority_voting: false
   nodes:
+    - id: Client Liaison
+      type: agent
+      description: 'NEW: Human clarification checkpoint before design phase'
+      context_window: 0
+      config:
+        name: nvidia/nemotron-3-super-120b-a12b:free
+        provider: openrouter
+        role: |-
+          ${COMMON_PROMPT}
+          You are Client Liaison. You are the first point of contact between the human user and the ChatDev software development pipeline.
+          Your job is to evaluate whether the user's software requirements are clear and complete enough to proceed with development.
+          
+          Follow this process:
+          1. Analyze the user's requirements for ambiguity, missing details, or conflicting information. Do that by asking 3-5 questions. These questions, when answered, should give you a clear picture of the user's needs and expectations.
+          2. If, and only if the user does not provide response to your question, ask them again. If they don't provide an answer, forget about it.
+          3. Summarize the enriched requirements and output "<INFO> Requirements are clear. Proceeding to development."
+          4. Do not, under any circumstances, talk to the user more than 2 times. 
+        base_url: ${BASE_URL}
+        api_key: ${API_KEY}
+        params: {}
+        tooling: []
+        thinking:
+        memories: []
+        retry:
+
+    - id: Human Input
+      type: human
+      description: 'Waits for user response to Client Liaison clarification questions'
+      context_window: 0
+      config: {}
+
     - id: Code Complete All Phase Loop Counter
       type: loop_counter
       description: ''
@@ -12,6 +43,7 @@ graph:
         max_iterations: 5
         reset_on_emit: true
         message: ''
+
     - id: Test Phase Loop Counter
       type: loop_counter
       description: ''
@@ -20,25 +52,29 @@ graph:
         max_iterations: 3
         reset_on_emit: true
         message: ''
+
     - id: FINAL
       type: passthrough
       description: ''
       context_window: 0
       config: {}
+
     - id: USER
       type: passthrough
       description: ''
       context_window: 0
       config: {}
+
     - id: PSEUDO
       type: passthrough
       config: {}
       description: ''
       context_window: 0
+
     - id: Programmer Code Review
       type: agent
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: nvidia/nemotron-3-super-120b-a12b:free
         role: |-
           ${COMMON_PROMPT}
           You are Programmer. we are both working at ChatDev. We share a common interest in collaborating to successfully complete a task assigned by a new customer.
@@ -68,10 +104,11 @@ graph:
         retry:
       description: ''
       context_window: -1
+
     - id: Programmer Test Modification
       type: agent
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: nvidia/nemotron-3-super-120b-a12b:free
         role: |-
           ${COMMON_PROMPT}
           You are Programmer. we are both working at ChatDev. We share a common interest in collaborating to successfully complete a task assigned by a new customer.
@@ -101,10 +138,11 @@ graph:
         retry:
       description: ''
       context_window: -1
+
     - id: Chief Executive Officer
       type: agent
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: nvidia/nemotron-3-super-120b-a12b:free
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
@@ -134,6 +172,7 @@ graph:
         retry:
       description: ''
       context_window: 0
+
     - id: Code Review Comment Phase Prompt for Assistant
       type: literal
       config:
@@ -155,6 +194,7 @@ graph:
         role: user
       description: ''
       context_window: 0
+
     - id: Test Modification Phase Loop Counter
       type: loop_counter
       config:
@@ -163,10 +203,11 @@ graph:
         message: ''
       description: ''
       context_window: 0
+
     - id: Programmer Code Complete
       type: agent
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: nvidia/nemotron-3-super-120b-a12b:free
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
@@ -196,6 +237,7 @@ graph:
         retry:
       description: ''
       context_window: 0
+
     - id: Code Complete Phase for Assistant
       type: literal
       config:
@@ -211,10 +253,11 @@ graph:
         role: user
       description: ''
       context_window: 0
+
     - id: Programmer Coding
       type: agent
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: nvidia/nemotron-3-super-120b-a12b:free
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
@@ -244,6 +287,7 @@ graph:
         retry:
       description: ''
       context_window: 0
+
     - id: Test Error Summary Phase Prompt for Assistant
       type: literal
       config:
@@ -262,10 +306,11 @@ graph:
         role: user
       description: ''
       context_window: 0
+
     - id: Chief Product Officer
       type: agent
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: nvidia/nemotron-3-super-120b-a12b:free
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
@@ -294,6 +339,7 @@ graph:
         retry:
       description: ''
       context_window: -1
+
     - id: Manual Phase Prompt for Assistant
       type: literal
       config:
@@ -307,6 +353,7 @@ graph:
         role: user
       description: ''
       context_window: 0
+
     - id: Manual Phase Prompt for User
       type: literal
       config:
@@ -320,10 +367,11 @@ graph:
         role: assistant
       description: ''
       context_window: 0
+
     - id: Programmer Test Error Summary
       type: agent
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: nvidia/nemotron-3-super-120b-a12b:free
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
@@ -349,6 +397,7 @@ graph:
         retry:
       description: ''
       context_window: -1
+
     - id: Manual Phase Loop Counter
       type: loop_counter
       config:
@@ -357,10 +406,11 @@ graph:
         message: ''
       description: ''
       context_window: 0
+
     - id: Code Reviewer
       type: agent
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: nvidia/nemotron-3-super-120b-a12b:free
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
@@ -385,6 +435,7 @@ graph:
         retry:
       description: ''
       context_window: -1
+
     - id: Code Review Modification Phase Prompt for Assistant
       type: literal
       config:
@@ -398,6 +449,7 @@ graph:
         role: user
       description: ''
       context_window: 0
+
     - id: Test Modification Phase Prompt for Assistant
       type: literal
       config:
@@ -412,6 +464,7 @@ graph:
         role: user
       description: ''
       context_window: 0
+
     - id: Test Modification Phase Prompt for User
       type: literal
       config:
@@ -426,6 +479,7 @@ graph:
         role: assistant
       description: ''
       context_window: 0
+
     - id: Coding Phase Prompt for Assistant
       type: literal
       config:
@@ -455,10 +509,11 @@ graph:
         role: user
       description: ''
       context_window: 0
+
     - id: Software Test Engineer
       type: agent
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: nvidia/nemotron-3-super-120b-a12b:free
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
@@ -494,6 +549,7 @@ graph:
         retry:
       description: ''
       context_window: -1
+
     - id: Code Review Phase Loop Counter
       type: loop_counter
       config:
@@ -502,7 +558,49 @@ graph:
         message: ''
       description: ''
       context_window: 0
+
   edges:
+    # Client Liaison → Human Input (when questions asked, no <INFO>)
+    - from: Client Liaison
+      to: Human Input
+      trigger: true
+      condition:
+        type: keyword
+        config:
+          any: []
+          none:
+            - <INFO>
+          regex: []
+          case_sensitive: true
+      carry_data: true
+      keep_message: false
+      process:
+
+    # Human Input → Client Liaison (loop back for re-evaluation)
+    - from: Human Input
+      to: Client Liaison
+      trigger: true
+      condition: 'true'
+      carry_data: true
+      keep_message: false
+      process:
+
+    # Client Liaison → USER (when requirements are clear, has <INFO>)
+    - from: Client Liaison
+      to: USER
+      trigger: true
+      condition:
+        type: keyword
+        config:
+          any:
+            - <INFO>
+          none: []
+          regex: []
+          case_sensitive: true
+      carry_data: true
+      keep_message: false
+      process:
+
     - from: Coding Phase Prompt for Assistant
       to: Programmer Coding
       trigger: true
@@ -1007,15 +1105,17 @@ graph:
       clear_context: true
       clear_kept_context: false
       process:
+
   memory: []
   initial_instruction: ''
   start:
-    - USER
+    - Client Liaison
     - Coding Phase Prompt for Assistant
   end: []
+
 vars:
-  COMMON_PROMPT: ChatDev is a software company powered by multiple intelligent 
-    agents, such as chief executive officer, chief human resources officer, 
-    chief product officer, chief technology officer, etc, with a multi-agent 
-    organizational structure and the mission of \"changing the digital world 
-    through programming\".
+  COMMON_PROMPT: ChatDev is a software company powered by multiple intelligent
+    agents, such as chief executive officer, chief human resources officer,
+    chief product officer, chief technology officer, etc, with a multi-agent
+    organizational structure and the mission of "changing the digital world
+    through programming".

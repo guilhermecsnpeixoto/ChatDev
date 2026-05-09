@@ -1,0 +1,371 @@
+graph:
+  id: ChatDev_simple_v1
+  description: Simplified 5-agent software development pipeline with direct downstream flow and targeted feedback loops.
+  log_level: DEBUG
+  is_majority_voting: false
+  nodes:
+    - id: USER
+      type: passthrough
+      description: Receives the original user request
+      context_window: 0
+      config: {}
+
+    - id: Chief Executive Officer
+      type: agent
+      description: Converts user requirements into project vision, high-level design, and functional requirements.
+      context_window: -1
+      config:
+        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        provider: openrouter
+        role: |-
+          ${COMMON_PROMPT}
+          You are the Chief Executive Officer.
+          You are part of a collaborative team where each member has a specific role.
+          
+          Your responsibilities:
+          1) Transform the user's request into a clear product vision.
+          2) Produce a high-level design and functional requirements.
+          3) Define acceptance criteria and project constraints.
+          4) Provide a concise project brief for the CTO to translate into technical specifications.
+          
+          Critical constraints:
+          - You DO NOT write code.
+          - You DO NOT create files or folders.
+          - You DO NOT run commands or call execution tools.
+          - You only produce written specifications and requirements.
+          - Your output will be passed to the Chief Technology Officer, who will handle technical planning.
+          
+          Keep your output clear, actionable, and structured for technical handoff.
+        base_url: ${BASE_URL}
+        api_key: ${API_KEY}
+        params: {}
+        tooling:
+          - type: function
+            config:
+              tools:
+                - name: describe_available_files
+                - name: read_file_segment
+                - name: search_in_files
+                - name: list_directory
+              timeout:
+        thinking:
+        memories: []
+        retry:
+
+    - id: Chief Technology Officer
+      type: agent
+      description: Defines architecture, tech stack, and file structure from CEO plan.
+      context_window: -1
+      config:
+        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        provider: openrouter
+        role: |-
+          ${COMMON_PROMPT}
+          You are the Chief Technology Officer.
+          You are part of a collaborative team where each member has a specific role.
+          
+          Your responsibilities:
+          1) Convert product-level requirements from the CEO into technical architecture.
+          2) Select appropriate technology stack and justify key choices.
+          3) Define project file/folder structure and module organization.
+          4) Produce implementation-ready specifications and pseudocode for the Programmer.
+          
+          Critical constraints:
+          - You DO NOT write actual code or implementation.
+          - You DO NOT create files or folders.
+          - You DO NOT run commands or call execution tools.
+          - You only produce technical specifications, pseudocode, and architecture documents.
+          - Your output will be passed to the Programmer, who will implement based on your specs.
+          
+          Keep your specifications clear, detailed, and actionable for implementation.
+        base_url: ${BASE_URL}
+        api_key: ${API_KEY}
+        params: {}
+        tooling:
+          - type: function
+            config:
+              tools:
+                - name: describe_available_files
+                - name: read_file_segment
+                - name: search_in_files
+                - name: list_directory
+              timeout:
+        thinking:
+        memories: []
+        retry:
+
+    - id: Programmer
+      type: agent
+      description: Implements and updates code according to CTO specs and feedback.
+      context_window: -1
+      config:
+        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        provider: openrouter
+        role: |-
+          ${COMMON_PROMPT}
+          You are the Programmer.
+          You are part of a collaborative team where each member has a specific role.
+          
+          Your responsibilities:
+          1) Implement code based on CTO technical specifications and architecture.
+          2) Create files, folders, and project structure as specified by the CTO.
+          3) Modify existing code to resolve defects reported by the Code Reviewer.
+          4) Fix test failures reported by the Tester.
+          5) Save all file changes using available functions.
+          6) Ensure all code is complete, functional, and executable (no placeholders such as pass).
+          
+          You work with feedback from:
+          - Code Reviewer: sends code quality and correctness issues.
+          - Tester: sends test failures and edge cases.
+          
+          Output rules:
+          - If all requested work is complete for a given iteration, include "<INFO> Finished".
+          - Otherwise, describe what you have done and any blockers.
+        base_url: ${BASE_URL}
+        api_key: ${API_KEY}
+        params: {}
+        tooling:
+          - type: function
+            config:
+              tools:
+                - name: uv_related:All
+                - name: apply_text_edits
+                - name: create_folder
+                - name: describe_available_files
+                - name: delete_path
+                - name: read_file_segment
+                - name: search_in_files
+                - name: save_file
+                - name: list_directory
+              timeout:
+        thinking:
+        memories: []
+        retry:
+
+    - id: Code Reviewer
+      type: agent
+      description: Reviews implementation and reports defects.
+      context_window: -1
+      config:
+        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        provider: openrouter
+        role: |-
+          ${COMMON_PROMPT}
+          You are the Code Reviewer.
+          You are part of a collaborative team where each member has a specific role.
+          
+          Your responsibilities:
+          1) Load and review the Programmer's implementation against specifications.
+          2) Identify defects and quality issues with highest practical impact, including:
+             - infinite loops or deadlocks
+             - unimplemented or incomplete methods/functions
+             - logic bugs and potential runtime errors
+             - missing imports or unresolved references
+             - reliability and robustness concerns
+          3) Provide clear, actionable feedback for the Programmer to fix.
+          
+          Critical constraints:
+          - You DO NOT modify code yourself.
+          - You DO NOT create or delete files.
+          - You only identify and report issues.
+          - Your feedback will be sent to the Programmer for fixes.
+          
+          Output rules:
+          - If problems exist, provide a concise numbered list of issues and suggested fixes.
+          - If no relevant problems are found, output exactly "<INFO> Finished".
+        base_url: ${BASE_URL}
+        api_key: ${API_KEY}
+        params: {}
+        tooling:
+          - type: function
+            config:
+              tools:
+                - name: describe_available_files
+                - name: read_file_segment
+                - name: search_in_files
+                - name: list_directory
+              timeout:
+        thinking:
+        memories: []
+        retry:
+
+    - id: Tester
+      type: agent
+      description: Creates tests and runs them; reports failures or completion.
+      context_window: -1
+      config:
+        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        provider: openrouter
+        role: |-
+          ${COMMON_PROMPT}
+          You are the Tester.
+          You are part of a collaborative team where each member has a specific role.
+          
+          Your responsibilities:
+          1) Write comprehensive tests for the Programmer's implementation.
+          2) Run the tests and collect results.
+          3) Identify failing test cases and analyze root causes.
+          4) Provide clear, actionable bug descriptions and reproduction steps for the Programmer.
+          5) Use timeouts when running commands that might not terminate (e.g., servers, games).
+          
+          Important timeout guidance:
+          - If a program times out but produces successful startup logs (e.g., "Listening on port", "Game started"), do NOT report it as a failure.
+          - Only report timeouts as bugs if the program was supposed to complete quickly but hung without output.
+          
+          Critical constraints:
+          - You DO NOT modify code yourself.
+          - You only identify and report test failures.
+          - Your findings will be sent to the Programmer for fixes.
+          
+          Output rules:
+          - If tests pass and no blocking issues remain, output exactly "<INFO> Finished".
+          - Otherwise, report each failing test case, expected vs. actual behavior, and suspected root causes.
+        base_url: ${BASE_URL}
+        api_key: ${API_KEY}
+        params: {}
+        tooling:
+          - type: function
+            config:
+              tools:
+                - name: uv_related:All
+                - name: apply_text_edits
+                - name: create_folder
+                - name: describe_available_files
+                - name: delete_path
+                - name: read_file_segment
+                - name: search_in_files
+                - name: save_file
+                - name: list_directory
+              timeout:
+        thinking:
+        memories: []
+        retry:
+
+    - id: FINAL
+      type: passthrough
+      description: Terminal node when testing confirms completion.
+      context_window: 0
+      config: {}
+
+  edges:
+    - from: USER
+      to: Chief Executive Officer
+      trigger: true
+      condition: 'true'
+      carry_data: true
+      keep_message: true
+      clear_context: false
+      clear_kept_context: false
+      process:
+
+    - from: Chief Executive Officer
+      to: Chief Technology Officer
+      trigger: true
+      condition: 'true'
+      carry_data: true
+      keep_message: false
+      clear_context: false
+      clear_kept_context: false
+      process:
+
+    - from: Chief Technology Officer
+      to: Programmer
+      trigger: true
+      condition: 'true'
+      carry_data: true
+      keep_message: false
+      clear_context: false
+      clear_kept_context: false
+      process:
+
+    - from: Programmer
+      to: Code Reviewer
+      trigger: true
+      condition: 'true'
+      carry_data: true
+      keep_message: false
+      clear_context: false
+      clear_kept_context: false
+      process:
+
+    - from: Code Reviewer
+      to: Programmer
+      trigger: true
+      condition:
+        type: keyword
+        config:
+          any: []
+          none:
+            - <INFO> Finished
+          regex: []
+          case_sensitive: true
+      carry_data: true
+      keep_message: false
+      clear_context: false
+      clear_kept_context: false
+      process:
+
+    - from: Code Reviewer
+      to: Tester
+      trigger: true
+      condition:
+        type: keyword
+        config:
+          any:
+            - <INFO> Finished
+          none: []
+          regex: []
+          case_sensitive: true
+      carry_data: true
+      keep_message: false
+      clear_context: false
+      clear_kept_context: false
+      process:
+
+    - from: Tester
+      to: Programmer
+      trigger: true
+      condition:
+        type: keyword
+        config:
+          any: []
+          none:
+            - <INFO> Finished
+          regex: []
+          case_sensitive: true
+      carry_data: true
+      keep_message: false
+      clear_context: false
+      clear_kept_context: false
+      process:
+
+    - from: Tester
+      to: FINAL
+      trigger: true
+      condition:
+        type: keyword
+        config:
+          any:
+            - <INFO> Finished
+          none: []
+          regex: []
+          case_sensitive: true
+      carry_data: true
+      keep_message: false
+      clear_context: false
+      clear_kept_context: false
+      process:
+
+  memory: []
+  initial_instruction: ''
+  start:
+    - USER
+  end:
+    - FINAL
+
+vars:
+  COMMON_PROMPT: ChatDev is a software company powered by multiple intelligent
+    agents, such as chief executive officer, chief human resources officer,
+    chief product officer, chief technology officer, etc, with a multi-agent
+    organizational structure and the mission of "changing the digital world
+    through programming".

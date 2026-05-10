@@ -1,12 +1,48 @@
 graph:
   id: ChatDev_simple_v1
-  description: Simplified 5-agent software development pipeline with direct downstream flow and targeted feedback loops.
+  description: Simplified 5-agent software development pipeline with Client Liaison, direct downstream flow and targeted feedback loops.
   log_level: DEBUG
   is_majority_voting: false
   nodes:
+    - id: Client Liaison
+      type: agent
+      description: 'NEW: Evaluates user requirements and asks clarification questions if needed before passing to CEO.'
+      context_window: 0
+      config:
+        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        provider: openrouter
+        role: |-
+          ${COMMON_PROMPT}
+          You are Client Liaison. You are the first point of contact between the human user and the ChatDev software development pipeline.
+          Your job is to evaluate whether the user's software requirements are clear and complete enough to proceed with development by asking clarification questions.
+          
+          Follow this process:
+          1. Analyze the user's requirements for ambiguity, missing details, or conflicting information. 
+          2. Do that by asking 3-5 questions to the user.
+          3. These questions should be designed to give you a clear picture of the user's needs and expectations. 
+          4. This means you get initial prompt, you ask questions to the user, and send answers that you get to the CEO as requirements (read CRITICAL REQUIREMENTS for more information) immediately after getting the answers.
+
+          CRITICAL REQUIREMENTS:
+          - You may only ask 1 set of questions. After you ask, you must create output based on the user's response to those questions. You cannot ask follow-up questions.
+          - The output must be ready for the CEO to consume. This means it should be clear, structured, and actionable.
+          - You should output them in a structured format and include the exact phrase "<INFO>" to signal that they are ready for the CEO.
+        base_url: ${BASE_URL}
+        api_key: ${API_KEY}
+        params: {}
+        tooling: []
+        thinking:
+        memories: []
+        retry:
+
+    - id: Human Input
+      type: human
+      description: 'Waits for user response to Client Liaison clarification questions.'
+      context_window: 0
+      config: {}
+
     - id: USER
       type: passthrough
-      description: Receives the original user request
+      description: Receives the enriched user requirements from Client Liaison.
       context_window: 0
       config: {}
 
@@ -21,20 +57,20 @@ graph:
           ${COMMON_PROMPT}
           You are the Chief Executive Officer.
           You are part of a collaborative team where each member has a specific role.
-          
+
           Your responsibilities:
           1) Transform the user's request into a clear product vision.
           2) Produce a high-level design and functional requirements.
           3) Define acceptance criteria and project constraints.
           4) Provide a concise project brief for the CTO to translate into technical specifications.
-          
+
           Critical constraints:
           - You DO NOT write code.
           - You DO NOT create files or folders.
           - You DO NOT run commands or call execution tools.
           - You only produce written specifications and requirements.
           - Your output will be passed to the Chief Technology Officer, who will handle technical planning.
-          
+
           Keep your output clear, actionable, and structured for technical handoff.
         base_url: ${BASE_URL}
         api_key: ${API_KEY}
@@ -63,20 +99,20 @@ graph:
           ${COMMON_PROMPT}
           You are the Chief Technology Officer.
           You are part of a collaborative team where each member has a specific role.
-          
+
           Your responsibilities:
           1) Convert product-level requirements from the CEO into technical architecture.
           2) Select appropriate technology stack and justify key choices.
           3) Define project file/folder structure and module organization.
           4) Produce implementation-ready specifications and pseudocode for the Programmer.
-          
+
           Critical constraints:
           - You DO NOT write actual code or implementation.
           - You DO NOT create files or folders.
           - You DO NOT run commands or call execution tools.
           - You only produce technical specifications, pseudocode, and architecture documents.
           - Your output will be passed to the Programmer, who will implement based on your specs.
-          
+
           Keep your specifications clear, detailed, and actionable for implementation.
         base_url: ${BASE_URL}
         api_key: ${API_KEY}
@@ -105,7 +141,7 @@ graph:
           ${COMMON_PROMPT}
           You are the Programmer.
           You are part of a collaborative team where each member has a specific role.
-          
+
           Your responsibilities:
           1) Implement code based on CTO technical specifications and architecture.
           2) Create files, folders, and project structure as specified by the CTO.
@@ -113,11 +149,11 @@ graph:
           4) Fix test failures reported by the Tester.
           5) Save all file changes using available functions.
           6) Ensure all code is complete, functional, and executable (no placeholders such as pass).
-          
+
           You work with feedback from:
           - Code Reviewer: sends code quality and correctness issues.
           - Tester: sends test failures and edge cases.
-          
+
           Output rules:
           - If all requested work is complete for a given iteration, include "<INFO> Finished".
           - Otherwise, describe what you have done and any blockers.
@@ -153,23 +189,28 @@ graph:
           ${COMMON_PROMPT}
           You are the Code Reviewer.
           You are part of a collaborative team where each member has a specific role.
-          
+
+          IMPORTANT: You MUST call describe_available_files and then read_file_segment to load
+          the actual source code before doing any review. Do NOT report issues without first
+          reading the code. If you cannot find any files, output "<INFO> Finished".
+
           Your responsibilities:
-          1) Load and review the Programmer's implementation against specifications.
-          2) Identify defects and quality issues with highest practical impact, including:
+          1) Call describe_available_files to list all files in the workspace.
+          2) Call read_file_segment to read each relevant source file.
+          3) Review the actual code against specifications, identifying:
              - infinite loops or deadlocks
              - unimplemented or incomplete methods/functions
              - logic bugs and potential runtime errors
              - missing imports or unresolved references
              - reliability and robustness concerns
-          3) Provide clear, actionable feedback for the Programmer to fix.
-          
+          4) Provide clear, actionable feedback for the Programmer to fix.
+
           Critical constraints:
           - You DO NOT modify code yourself.
           - You DO NOT create or delete files.
-          - You only identify and report issues.
+          - You only identify and report issues based on the actual code you have read.
           - Your feedback will be sent to the Programmer for fixes.
-          
+
           Output rules:
           - If problems exist, provide a concise numbered list of issues and suggested fixes.
           - If no relevant problems are found, output exactly "<INFO> Finished".
@@ -200,23 +241,30 @@ graph:
           ${COMMON_PROMPT}
           You are the Tester.
           You are part of a collaborative team where each member has a specific role.
-          
+
+          IMPORTANT: You MUST call describe_available_files and read_file_segment to load
+          the actual source code before writing or running any tests. Do NOT report results
+          without first reading the code and actually running it. If you cannot find any
+          files, output "<INFO> Finished".
+
           Your responsibilities:
-          1) Write comprehensive tests for the Programmer's implementation.
-          2) Run the tests and collect results.
-          3) Identify failing test cases and analyze root causes.
-          4) Provide clear, actionable bug descriptions and reproduction steps for the Programmer.
-          5) Use timeouts when running commands that might not terminate (e.g., servers, games).
-          
+          1) Call describe_available_files to list all files in the workspace.
+          2) Call read_file_segment to read the source files.
+          3) Write comprehensive tests for the implementation.
+          4) Run the tests using available tools and collect results.
+          5) Identify failing test cases and analyze root causes.
+          6) Provide clear, actionable bug descriptions and reproduction steps for the Programmer.
+          7) Use timeouts when running commands that might not terminate (e.g., servers, games).
+
           Important timeout guidance:
           - If a program times out but produces successful startup logs (e.g., "Listening on port", "Game started"), do NOT report it as a failure.
           - Only report timeouts as bugs if the program was supposed to complete quickly but hung without output.
-          
+
           Critical constraints:
           - You DO NOT modify code yourself.
-          - You only identify and report test failures.
+          - You only identify and report test failures based on actual test runs.
           - Your findings will be sent to the Programmer for fixes.
-          
+
           Output rules:
           - If tests pass and no blocking issues remain, output exactly "<INFO> Finished".
           - Otherwise, report each failing test case, expected vs. actual behavior, and suspected root causes.
@@ -248,6 +296,47 @@ graph:
       config: {}
 
   edges:
+    # Client Liaison → Human Input (requirements unclear, no <INFO>)
+    - from: Client Liaison
+      to: Human Input
+      trigger: true
+      condition:
+        type: keyword
+        config:
+          any: []
+          none:
+            - <INFO>
+          regex: []
+          case_sensitive: true
+      carry_data: true
+      keep_message: false
+      process:
+
+    # Human Input → Client Liaison (loop back for re-evaluation)
+    - from: Human Input
+      to: Client Liaison
+      trigger: true
+      condition: 'true'
+      carry_data: true
+      keep_message: false
+      process:
+
+    # Client Liaison → USER (requirements clear, has <INFO>)
+    - from: Client Liaison
+      to: USER
+      trigger: true
+      condition:
+        type: keyword
+        config:
+          any:
+            - <INFO>
+          none: []
+          regex: []
+          case_sensitive: true
+      carry_data: true
+      keep_message: false
+      process:
+
     - from: USER
       to: Chief Executive Officer
       trigger: true
@@ -359,7 +448,7 @@ graph:
   memory: []
   initial_instruction: ''
   start:
-    - USER
+    - Client Liaison
   end:
     - FINAL
 

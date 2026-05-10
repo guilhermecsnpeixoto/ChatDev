@@ -258,7 +258,7 @@ class OpenRouterProvider(ModelProvider):
 
         return Message(
             role=MessageRole.ASSISTANT,
-            content=msg.get("content") or "",
+            content=msg.get("content") or msg.get("reasoning") or "",
             tool_calls=tool_calls
         )
 
@@ -272,7 +272,7 @@ class OpenRouterProvider(ModelProvider):
         msg = choice.get("message", {})
         assistant_msg = {
             "role": "assistant",
-            "content": msg.get("content") or ""
+            "content": msg.get("content") or msg.get("reasoning") or ""
         }
 
         if msg.get("tool_calls"):

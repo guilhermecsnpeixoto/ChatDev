@@ -7,25 +7,33 @@ graph:
     - id: Client Liaison
       type: agent
       description: 'NEW: Evaluates user requirements and asks clarification questions if needed before passing to CEO.'
-      context_window: 0
+      context_window: -1
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: google/gemini-2.0-flash-001
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
-          You are Client Liaison. You are the first point of contact between the human user and the ChatDev software development pipeline.
-          Your job is to evaluate whether the user's software requirements are clear and complete enough to proceed with development by asking clarification questions.
-          
-          Follow this process:
-          1. Analyze the user's requirements for ambiguity, missing details, or conflicting information. 
-          2. Do that by asking 3-5 questions to the user.
-          3. These questions should be designed to give you a clear picture of the user's needs and expectations. 
-          4. This means you get initial prompt, you ask questions to the user, and send answers that you get to the CEO as requirements (read CRITICAL REQUIREMENTS for more information) immediately after getting the answers.
+          You are Client Liaison.
+          You are part of a collaborative team where each member has a specific role.
 
-          CRITICAL REQUIREMENTS:
-          - You may only ask 1 set of questions. After you ask, you must create output based on the user's response to those questions. You cannot ask follow-up questions.
-          - The output must be ready for the CEO to consume. This means it should be clear, structured, and actionable.
-          - You should output them in a structured format and include the exact phrase "<INFO>" to signal that they are ready for the CEO.
+          Your responsibilities:
+          1) Receive the initial user request and evaluate the clarity and completeness of the requirements.
+          2) Produce questions to clarify any ambiguous, incomplete, or contradictory requirements.
+          3) The moment you receive ANY response from the user, you MUST stop asking questions and immediately define users' requirements based on user's answers in the following format: "Requirements Summary:
+            - [requirement 1]
+            - [requirement 2]
+            - [requirement 3]
+            <INFO> Requirements are clear. Proceeding to development."
+          4) Pass the requirements summary to the Chief Executive Officer.
+
+          Critical constraints:
+          - You DO NOT write code.
+          - You DO NOT create files or folders.
+          - You DO NOT run commands or call execution tools.
+          - You DO NOT ask more than 1 set of questions.
+          - After the user responds to your questions, you MUST immediately output the Requirements Summary and <INFO> statement. No exceptions.
+          - NEVER include "<INFO>" in the same message as your questions.
+          - Your output MUST be passed to the Chief Executive Officer, who will handle technical planning.
         base_url: ${BASE_URL}
         api_key: ${API_KEY}
         params: {}
@@ -51,7 +59,7 @@ graph:
       description: Converts user requirements into project vision, high-level design, and functional requirements.
       context_window: -1
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: google/gemini-2.0-flash-001
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
@@ -93,7 +101,7 @@ graph:
       description: Defines architecture, tech stack, and file structure from CEO plan.
       context_window: -1
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: google/gemini-2.0-flash-001
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
@@ -135,7 +143,7 @@ graph:
       description: Implements and updates code according to CTO specs and feedback.
       context_window: -1
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: google/gemini-2.0-flash-001
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
@@ -183,7 +191,7 @@ graph:
       description: Reviews implementation and reports defects.
       context_window: -1
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: google/gemini-2.0-flash-001
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
@@ -235,7 +243,7 @@ graph:
       description: Creates tests and runs them; reports failures or completion.
       context_window: -1
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: google/gemini-2.0-flash-001
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}

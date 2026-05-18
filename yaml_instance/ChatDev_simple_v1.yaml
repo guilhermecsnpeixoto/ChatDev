@@ -59,7 +59,7 @@ graph:
       description: Converts user requirements into project vision, high-level design, and functional requirements.
       context_window: -1
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: google/gemini-2.0-flash-001
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
@@ -101,7 +101,7 @@ graph:
       description: Defines architecture, tech stack, and file structure from CEO plan.
       context_window: -1
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: google/gemini-2.0-flash-001
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
@@ -143,7 +143,7 @@ graph:
       description: Implements and updates code according to CTO specs and feedback.
       context_window: -1
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: google/gemini-2.0-flash-001
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
@@ -191,7 +191,7 @@ graph:
       description: Reviews implementation and reports defects.
       context_window: -1
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: google/gemini-2.0-flash-001
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
@@ -242,7 +242,7 @@ graph:
       type: loop_counter
       context_window: 0
       config:
-        max_iterations: 3
+        max_iterations: 1
         reset_on_emit: true
         message: ''
       description: ''
@@ -252,7 +252,7 @@ graph:
       description: Creates tests and runs them; reports failures or completion.
       context_window: -1
       config:
-        name: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+        name: google/gemini-2.0-flash-001
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
@@ -394,6 +394,7 @@ graph:
       clear_kept_context: false
       process:
 
+    # Code Reviewer → Programmer (has issues, no <INFO> Finished)
     - from: Code Reviewer
       to: Programmer
       trigger: true
@@ -411,26 +412,25 @@ graph:
       clear_kept_context: false
       process:
 
+    # Code Reviewer → Review Loop Counter (only when <INFO> Finished)
     - from: Code Reviewer
       to: Review Loop Counter
       trigger: true
-      condition: 'true'
+      condition:
+        type: keyword
+        config:
+          any:
+            - <INFO> Finished
+          none: []
+          regex: []
+          case_sensitive: true
       carry_data: true
       keep_message: false
       clear_context: false
       clear_kept_context: false
       process:
 
-    - from: Review Loop Counter
-      to: Code Reviewer
-      trigger: true
-      condition: 'true'
-      carry_data: true
-      keep_message: false
-      clear_context: false
-      clear_kept_context: false
-      process:
-
+    # Review Loop Counter → Tester (always, after N iterations)
     - from: Review Loop Counter
       to: Tester
       trigger: true

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from runtime.node.agent import ToolManager
+from opik_integration.tracer import build_opik_tracer
 from utils.attachments import AttachmentStore
 from utils.function_manager import EDGE_FUNCTION_DIR, EDGE_PROCESSOR_FUNCTION_DIR, get_function_manager
 from utils.log_manager import LogManager
@@ -40,6 +41,9 @@ class RuntimeBuilder:
             "python_workspace_root": code_workspace,
             "attachment_store": attachment_store,
         }
+
+        opik_tracer = build_opik_tracer(session_id=session_id, workflow_id=self.graph.name)
+        global_state["opik_tracer"] = opik_tracer
 
         context = RuntimeContext(
             tool_manager=tool_manager,

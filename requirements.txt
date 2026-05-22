@@ -11,8 +11,10 @@ watchfiles
 websockets
 wsproto
 pydantic==2.12.5
+python-dotenv
 requests
 pytest
+opik
 ddgs
 beautifulsoup4
 matplotlib

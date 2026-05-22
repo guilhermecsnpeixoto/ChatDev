@@ -41,36 +41,64 @@ class OpenRouterProvider(ModelProvider):
         base_url = str(base_url).strip() or self.DEFAULT_BASE_URL
 
         return {
+            "mode": "requests",
             "api_key": api_key,
             "base_url": base_url,
             "headers": self._build_headers(),
         }
 
     def call_model(
-        self,
-        client: Dict[str, Any],
-        conversation: List[Message],
-        timeline: List[Any],
-        tool_specs: Optional[List[ToolSpec]] = None,
-        **kwargs,
+    self,
+    client: Dict[str, Any],
+    conversation: List[Message],
+    timeline: List[Any],
+    tool_specs: Optional[List[ToolSpec]] = None,
+    **kwargs,
     ) -> ModelResponse:
         """Call OpenRouter Chat Completions API with direct HTTP request."""
-        api_key = client["api_key"]
-        base_url = client["base_url"]
-        headers = client["headers"]
+        mode = client.get("mode", "requests")
+        headers = client.get("headers", {})
 
         # Build Chat Completions payload (no tool_choice auto-injection)
         payload = self._build_chat_payload(conversation, tool_specs, kwargs)
 
-        # Make HTTP request
-        url = f"{base_url.rstrip('/')}/chat/completions"
-        headers["Authorization"] = f"Bearer {api_key}"
-        headers["Content-Type"] = "application/json"
+        opik_tracer = getattr(self.config, "opik_tracer", None)
+        trace_id = getattr(self.config, "opik_trace_id", None)
+        span_id = None
+        if opik_tracer is not None and trace_id:
+            span_id = opik_tracer.start_span(
+                trace_id,
+                name="openrouter.chat.completions",
+                span_type="llm",
+                input_payload=payload,
+                metadata={
+                    "provider": "openrouter",
+                    "model": self.model_name,
+                    "node_id": getattr(self.config, "node_id", ""),
+                    "thread_id": getattr(self.config, "opik_thread_id", ""),
+                    "run_id": getattr(opik_tracer, "run_id", ""),
+                },
+            )
 
-        response = requests.post(url, json=payload, headers=headers, timeout=300)
-        response.raise_for_status()
+        try:
+            api_key = client["api_key"]
+            base_url = client["base_url"]
+            url = f"{base_url.rstrip('/')}/chat/completions"
+            headers["Authorization"] = f"Bearer {api_key}"
+            headers["Content-Type"] = "application/json"
+            response = requests.post(url, json=payload, headers=headers, timeout=300)
+            response.raise_for_status()
+            response_data = response.json()
 
-        response_data = response.json()
+        except Exception as exc:
+            if opik_tracer is not None and span_id:
+                opik_tracer.end_span(
+                    span_id,
+                    error_info=str(exc),
+                    metadata={"provider": "openrouter", "model": self.model_name},
+                )
+            raise
+
         self._track_token_usage(response_data)
 
         # Parse Chat Completions response
@@ -78,6 +106,29 @@ class OpenRouterProvider(ModelProvider):
         
         # Append to timeline for conversation continuity
         self._append_chat_response_output(timeline, response_data)
+
+        if opik_tracer is not None and span_id:
+            # Extract usage & cost safely
+           # Extract cost from usage block
+            usage = response_data.get("usage") if isinstance(response_data, dict) else None
+            cost = usage.get("cost") if isinstance(usage, dict) else None
+
+            # Optionally add a fallback cost calculation if cost is missing:
+            # if cost is None and usage:
+            #     cost = compute_cost_from_usage(usage, self.model_name)   # your custom function
+
+            opik_tracer.end_span(
+                span_id,
+                output=response_data,
+                usage=usage,
+                model=self.model_name,
+                provider="openrouter",      # keep as "openrouter" or map to a known provider
+                metadata={
+                    "provider": "openrouter",
+                    "model": self.model_name,
+                    "cost": cost,           # <-- Opik tracer will set span.total_cost from this
+                },
+            )
 
         return ModelResponse(message=message, raw_response=response_data)
 
@@ -99,7 +150,6 @@ class OpenRouterProvider(ModelProvider):
             "total_tokens": total_tokens,
         }
 
-        # Preserve reasoning tokens if present
         reasoning_tokens = self._read_reasoning_tokens(usage)
         if reasoning_tokens is not None:
             metadata["reasoning_tokens"] = reasoning_tokens

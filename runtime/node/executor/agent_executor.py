@@ -67,12 +67,46 @@ class AgentNodeExecutor(NodeExecutor):
             agent_config.token_tracker = self.context.get_token_tracker()
             agent_config.node_id = node.id
 
+            opik_tracer = self.context.global_state.get("opik_tracer")
+            trace_context = None
+            trace_output = None
+            trace_error = None
+
             input_data = self._inputs_to_text(inputs)
             input_payload = self._build_thinking_payload_from_inputs(inputs, input_data)
             memory_query_snapshot = self._build_memory_query_snapshot(inputs, input_data)
             input_mode = agent_config.input_mode or AgentInputMode.PROMPT
             external_tool_specs = self.tool_manager.get_tool_specs(agent_config.tooling)
             skill_manager = self._build_skill_manager(node, agent_config, external_tool_specs)
+
+            if opik_tracer is not None and getattr(opik_tracer, "enabled", False):
+                agent_config.opik_tracer = opik_tracer
+                agent_config.opik_thread_id = getattr(opik_tracer, "thread_id", "")
+                senders = sorted(
+                    {
+                        msg.metadata.get("source", "")
+                        for msg in inputs
+                        if isinstance(msg, Message) and isinstance(getattr(msg, "metadata", None), dict)
+                    }
+                )
+                sender_label = "+".join(filter(None, senders)) or "unknown"
+                trace_name = f"{sender_label}->{node.id}"
+                trace_context = opik_tracer.start_trace(
+                    name=trace_name,
+                    thread_id=getattr(opik_tracer, "thread_id", "") or node.id,
+                    input_payload=input_data,
+                    metadata={
+                        "node_id": node.id,
+                        "agent_role": node.role or "",
+                        "provider": agent_config.provider,
+                        "model": agent_config.name,
+                        "sender_ids": senders,
+                        "receiver_id": node.id,
+                        "run_id": getattr(opik_tracer, "run_id", ""),
+                    },
+                )
+                if trace_context is not None:
+                    agent_config.opik_trace_id = trace_context.trace_id
 
             provider = provider_class(agent_config)
             client = provider.create_client()
@@ -157,7 +191,9 @@ class AgentNodeExecutor(NodeExecutor):
             self._update_memory(node, input_data, inputs, final_message)
 
             if isinstance(final_message, Message):
+                trace_output = final_message.text_content()
                 return [self._clone_with_source(final_message, node.id)]
+            trace_output = str(final_message)
             return [self._build_message(
                 role=MessageRole.ASSISTANT,
                 content=final_message,
@@ -168,12 +204,25 @@ class AgentNodeExecutor(NodeExecutor):
             traceback.print_exc()
             error_msg = f"[Node: {node.id}] Error calling model: {str(e)}"
             self.log_manager.error(error_msg)
+            trace_error = str(e)
             return [self._build_message(
                 role=MessageRole.ASSISTANT,
                 content=f"Error calling model {node.model_name}: {str(e)}\n\nOriginal input: {input_data[:200]}...",
                 source=node.id,
             )]
         finally:
+            if trace_context is not None and opik_tracer is not None and getattr(opik_tracer, "enabled", False):
+                opik_tracer.end_trace(
+                    trace_context.trace_id,
+                    output=trace_output,
+                    error_info=trace_error,
+                    metadata={
+                        "node_id": node.id,
+                        "agent_role": node.role or "",
+                        "provider": agent_config.provider,
+                        "model": agent_config.name,
+                    },
+                )
             self._current_node_id = None
     
     def _prepare_prompt_messages(

@@ -1,12 +1,18 @@
 graph:
-  id: ChatDev_simple_v1
-  description: Simplified 5-agent software development pipeline with Client Liaison, direct downstream flow and targeted feedback loops.
+  id: ChatDev_simple_v1_dehallucination
+  description: >
+    Simplified 5-agent software development pipeline with Client Liaison,
+    direct downstream flow, targeted feedback loops, and communicative
+    dehallucination per the ChatDev paper (arXiv 2307.07924): the Programmer
+    proactively asks the Code Reviewer clarifying questions before acting on
+    any review comment, reducing coding hallucinations caused by vague
+    instructions.
   log_level: DEBUG
   is_majority_voting: false
   nodes:
     - id: Client Liaison
       type: agent
-      description: 'NEW: Evaluates user requirements and asks clarification questions if needed before passing to CEO.'
+      description: Evaluates user requirements and asks clarification questions if needed before passing to CEO.
       context_window: -1
       config:
         name: google/gemini-3.1-flash-lite-preview
@@ -43,16 +49,19 @@ graph:
         thinking: null
         memories: []
         retry: null
+
     - id: Human Input
       type: human
       description: Waits for user response to Client Liaison clarification questions.
       context_window: 0
       config: {}
+
     - id: USER
       type: passthrough
       description: Receives the enriched user requirements from Client Liaison.
       context_window: 0
       config: {}
+
     - id: Chief Executive Officer
       type: agent
       description: Converts user requirements into project vision, high-level design, and functional requirements.
@@ -98,6 +107,7 @@ graph:
         thinking: null
         memories: []
         retry: null
+
     - id: Chief Technology Officer
       type: agent
       description: Defines architecture, tech stack, and file structure from CEO plan.
@@ -139,9 +149,10 @@ graph:
         thinking: null
         memories: []
         retry: null
+
     - id: Programmer
       type: agent
-      description: Implements and updates code according to CTO specs and feedback.
+      description: Implements code per CTO specs. Uses communicative dehallucination to ask the Code Reviewer clarifying questions before acting on review comments.
       context_window: -1
       config:
         name: google/gemini-3.1-flash-lite-preview
@@ -156,18 +167,37 @@ graph:
           Your responsibilities:
           1) Implement code based on CTO technical specifications and architecture.
           2) Create files, folders, and project structure as specified by the CTO.
-          3) Modify existing code to resolve defects reported by the Code Reviewer.
+          3) Resolve defects reported by the Code Reviewer (follow the communicative dehallucination protocol below).
           4) Fix test failures reported by the Tester.
           5) Save all file changes using available functions.
           6) Ensure all code is complete, functional, and executable (no placeholders such as pass).
+
+          Communicative dehallucination protocol (MANDATORY when receiving a review comment):
+          Coding hallucinations occur when you act on vague or underspecified instructions. To prevent this,
+          you MUST follow a two-step process whenever you receive a comment from the Code Reviewer:
+
+          STEP 1 — Clarify before acting:
+            Read the comment carefully. Before writing or changing any code, ask the Code Reviewer
+            one or more targeted clarifying questions to get the precise details you need.
+            Do NOT guess. Do NOT assume. Do NOT start coding yet.
+            Ask about: exact expected behaviour, edge cases, which file or method to change,
+            what the correct output or error handling should be, etc.
+            Example: "To fix the issue you described in process_input(), should I validate the input
+            before or after the type conversion? And should I raise an exception or return None on failure?"
+
+          STEP 2 — Act once clarified:
+            Only after you receive specific answers (or if the original comment was already completely
+            clear and unambiguous) should you load the source code via `describe_available_files` +
+            `read_file_segment`, apply the fix, save the changes, and include "<INFO> Finished".
 
           You work with feedback from:
           - Code Reviewer: sends code quality and correctness issues.
           - Tester: sends test failures and edge cases.
 
           Output rules:
-          - If all requested work is complete for a given iteration, include "<INFO> Finished".
-          - Otherwise, describe what you have done and any blockers.
+          - If asking clarifying questions (Step 1): write ONLY your questions. No code changes.
+          - If applying a fix (Step 2): describe what you changed and include "<INFO> Finished".
+          - If all work is complete with nothing left to fix: include "<INFO> Finished".
         base_url: ${BASE_URL}
         api_key: ${API_KEY}
         params: {}
@@ -188,9 +218,10 @@ graph:
         thinking: null
         memories: []
         retry: null
+
     - id: Code Reviewer
       type: agent
-      description: Reviews implementation and reports defects.
+      description: Reviews implementation and reports defects. Must answer the Programmer's clarifying questions with specific details before the Programmer acts.
       context_window: -1
       config:
         name: google/gemini-3.1-flash-lite-preview
@@ -216,17 +247,26 @@ graph:
              - logic bugs and potential runtime errors
              - missing imports or unresolved references
              - reliability and robustness concerns
-          4) Provide clear, actionable feedback for the Programmer to fix.
+          4) Provide clear, specific, and actionable feedback — precise enough that the Programmer does not need to guess.
+
+          Communicative dehallucination protocol (MANDATORY):
+          The Programmer will ask you clarifying questions before acting on your comment.
+          This is intentional and expected — do NOT skip over their questions.
+          You MUST answer those questions with concrete, unambiguous details.
+          Vague answers cause coding hallucinations. Be specific.
+          Example: If they ask "should I validate before or after conversion?", answer:
+          "Validate before conversion. Raise a ValueError with message 'Invalid input: expected int' on failure."
+          After answering, end your message with "<INFO> Problem Found" to keep the fix loop active.
 
           Critical constraints:
           - You DO NOT modify code yourself.
           - You DO NOT create or delete files.
-          - You only identify and report issues based on the actual code you have read.
-          - Your feedback will be sent to the Programmer for fixes.
+          - Only report issues you can point to in the actual loaded source code.
 
           Output rules:
-          - If problems exist, provide a concise numbered list of issues and suggested fixes and ensure your message ends with "<INFO> Problem Found".
-          - If no relevant problems are found, output exactly "<INFO> Finished".
+          - If reporting a new problem: numbered list of issues with suggested fixes; end with "<INFO> Problem Found".
+          - If answering the Programmer's clarifying questions: specific answers; end with "<INFO> Problem Found".
+          - If no relevant problems remain: output exactly "<INFO> Finished".
         base_url: ${BASE_URL}
         api_key: ${API_KEY}
         params: {}
@@ -242,6 +282,7 @@ graph:
         thinking: null
         memories: []
         retry: null
+
     - id: Tester
       type: agent
       description: Creates tests and runs them; reports failures or completion.
@@ -277,15 +318,8 @@ graph:
           - You only identify and report build/compile/run and test failures based on actual attempts.
 
           Output rules:
-          - If, after any check or run, you observe problems, report them in a short bullet list (1–4 items) with a very brief one-phrase explanation (e.g., "assertion mismatch", "missing import", "timeout") and ensure the message ends with "<INFO> Problem Found". Example:
-            "- Failing tests: test_api_auth — assertion mismatch"
-            "- Smoke-run: crash on start — missing import"
-            "<INFO> Problem Found"
-          - When you determine there is nothing more to test OR the testing limit has been reached with no outstanding problems, output "<INFO> Finished" and immediately follow it with a very short bullet list (2–4 items) summarizing what was tested and the results. Example:
-            "<INFO> Finished"
-            "- Build: OK"
-            "- Smoke-run: OK"
-            "- Failing tests: none"
+          - If problems exist: report them in a short bullet list (1-4 items) with a brief explanation; end with "<INFO> Problem Found".
+          - If nothing more to test or no problems: output "<INFO> Finished" followed by a short summary (2-4 bullets) of what was tested and results.
         base_url: ${BASE_URL}
         api_key: ${API_KEY}
         params: {}
@@ -306,11 +340,13 @@ graph:
         thinking: null
         memories: []
         retry: null
+
     - id: FINAL
       type: passthrough
       description: Terminal node when testing confirms completion.
       context_window: 0
       config: {}
+
     - id: Review Loop Counter
       type: loop_counter
       config:
@@ -320,6 +356,7 @@ graph:
       description: ''
       context_window: 0
       log_output: true
+
     - id: Test Loop Counter
       type: loop_counter
       config:
@@ -329,7 +366,9 @@ graph:
       description: ''
       context_window: 0
       log_output: true
+
   edges:
+    # Client Liaison flow
     - from: Client Liaison
       to: Human Input
       trigger: true
@@ -344,6 +383,7 @@ graph:
       carry_data: true
       keep_message: false
       process: null
+
     - from: Human Input
       to: Client Liaison
       trigger: true
@@ -351,6 +391,7 @@ graph:
       carry_data: true
       keep_message: false
       process: null
+
     - from: Client Liaison
       to: USER
       trigger: true
@@ -365,6 +406,8 @@ graph:
       carry_data: true
       keep_message: false
       process: null
+
+    # Planning chain
     - from: USER
       to: Chief Executive Officer
       trigger: true
@@ -374,6 +417,7 @@ graph:
       clear_context: false
       clear_kept_context: false
       process: null
+
     - from: Chief Executive Officer
       to: Chief Technology Officer
       trigger: true
@@ -383,6 +427,7 @@ graph:
       clear_context: false
       clear_kept_context: false
       process: null
+
     - from: Chief Technology Officer
       to: Programmer
       trigger: true
@@ -392,6 +437,9 @@ graph:
       clear_context: false
       clear_kept_context: false
       process: null
+
+    # Programmer sends output to Code Reviewer
+    # (initial code, clarifying questions, or confirmed fixes)
     - from: Programmer
       to: Code Reviewer
       trigger: true
@@ -401,30 +449,19 @@ graph:
       clear_context: false
       clear_kept_context: false
       process: null
-    - from: Tester
-      to: FINAL
-      trigger: true
-      condition:
-        type: keyword
-        config:
-          any:
-            - <INFO> Finished
-          none: []
-          regex: []
-          case_sensitive: true
-      carry_data: true
-      keep_message: false
-      clear_context: false
-      clear_kept_context: false
-      process: null
+
+    # Code Reviewer → Programmer
+    # Fires when Reviewer has a problem report OR is answering clarifying questions.
+    # The Programmer's dehallucination protocol governs whether it asks more
+    # questions first (Step 1) or applies the fix directly (Step 2).
     - from: Code Reviewer
-      to: Tester
+      to: Programmer
       trigger: true
       condition:
         type: keyword
         config:
           any:
-            - <INFO> Finished
+            - <INFO> Problem Found
           none: []
           regex: []
           case_sensitive: true
@@ -434,6 +471,8 @@ graph:
       clear_kept_context: false
       process: null
       dynamic: null
+
+    # Review loop counter
     - from: Code Reviewer
       to: Review Loop Counter
       trigger: true
@@ -451,7 +490,42 @@ graph:
       clear_kept_context: false
       process: null
       dynamic: null
+
+    - from: Review Loop Counter
+      to: Tester
+      trigger: true
+      condition:
+        type: function
+        config:
+          name: 'true'
+      carry_data: true
+      keep_message: false
+      clear_context: false
+      clear_kept_context: false
+      process: null
+      dynamic: null
+
+    # Review done → Tester
     - from: Code Reviewer
+      to: Tester
+      trigger: true
+      condition:
+        type: keyword
+        config:
+          any:
+            - <INFO> Finished
+          none: []
+          regex: []
+          case_sensitive: true
+      carry_data: true
+      keep_message: false
+      clear_context: false
+      clear_kept_context: false
+      process: null
+      dynamic: null
+
+    # Test loop
+    - from: Tester
       to: Programmer
       trigger: true
       condition:
@@ -468,19 +542,7 @@ graph:
       clear_kept_context: false
       process: null
       dynamic: null
-    - from: Review Loop Counter
-      to: Tester
-      trigger: true
-      condition:
-        type: function
-        config:
-          name: 'true'
-      carry_data: true
-      keep_message: false
-      clear_context: false
-      clear_kept_context: false
-      process: null
-      dynamic: null
+
     - from: Tester
       to: Test Loop Counter
       trigger: true
@@ -498,23 +560,7 @@ graph:
       clear_kept_context: false
       process: null
       dynamic: null
-    - from: Tester
-      to: Programmer
-      trigger: true
-      condition:
-        type: keyword
-        config:
-          any: []
-          none:
-            - <INFO> Finished
-          regex: []
-          case_sensitive: true
-      carry_data: true
-      keep_message: false
-      clear_context: false
-      clear_kept_context: false
-      process: null
-      dynamic: null
+
     - from: Test Loop Counter
       to: FINAL
       trigger: true
@@ -528,11 +574,30 @@ graph:
       clear_kept_context: false
       process: null
       dynamic: null
+
+    - from: Tester
+      to: FINAL
+      trigger: true
+      condition:
+        type: keyword
+        config:
+          any:
+            - <INFO> Finished
+          none: []
+          regex: []
+          case_sensitive: true
+      carry_data: true
+      keep_message: false
+      clear_context: false
+      clear_kept_context: false
+      process: null
+
   memory: []
   initial_instruction: ''
   start:
     - Client Liaison
   end:
     - FINAL
+
 vars:
   COMMON_PROMPT: ChatDev is a software company powered by multiple intelligent agents, such as chief executive officer, chief human resources officer, chief product officer, chief technology officer, etc, with a multi-agent organizational structure and the mission of "changing the digital world through programming".

@@ -19,7 +19,7 @@ graph:
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
-          Tooling guidance: Minimize external tool calls—batch `describe_available_files` and `read_file_segment`, read only required files, cache results, and avoid repeated runs unless necessary.
+          Tooling guidance: Minimize external tool calls—batch `describe_available_files` and `read_file_segment`, read only required files, cache results, and avoid repeated runs unless necessary. When using `uv_run` for smoke tests or server-like programs, always pass `timeout_seconds`; do not wait for natural termination when the program is expected to keep running.
           Language constraint: All development, examples, and implementation details must be provided in Python.
           You are Client Liaison.
           You are part of a collaborative team where each member has a specific role.
@@ -310,6 +310,7 @@ graph:
           5) If tests or runs fail, identify failing cases and provide reproduction steps and likely root causes.
 
           Important timeout guidance:
+          - Always pass `timeout_seconds` to `uv_run`; use a short timeout for smoke runs of servers, GUIs, games, or any program expected to keep running.
           - If a program times out but shows clear startup logs (e.g., "Listening on port", "Game started"), treat it as a successful startup and do NOT classify as a failure.
           - Only classify a timeout as a bug if the program was supposed to complete quickly or produced no useful output/errors before timing out.
 

@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence
 
 _SAFE_PACKAGE_RE = re.compile(r"^[A-Za-z0-9_.\-+=<>!\[\],@:/]+$")
-_DEFAULT_TIMEOUT = float(os.getenv("LIB_INSTALL_TIMEOUT", "120"))
+_MAX_TIMEOUT_SECONDS = 120.0
+_DEFAULT_TIMEOUT = min(float(os.getenv("LIB_INSTALL_TIMEOUT", "120")), _MAX_TIMEOUT_SECONDS)
 _OUTPUT_SNIPPET_LIMIT = 240
 
 
@@ -102,7 +103,7 @@ def _coerce_timeout_seconds(timeout_seconds: Any) -> float | None:
 
     if value <= 0:
         raise ValueError("timeout_seconds must be positive")
-    return value
+    return min(value, _MAX_TIMEOUT_SECONDS)
 
 
 def _validate_flag_args(args: Sequence[str] | None) -> List[str]:

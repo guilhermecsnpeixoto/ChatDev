@@ -632,11 +632,44 @@ vars:
     with a multi-agent organizational structure and the mission of "changing the digital world
     through programming".
 
-  # Set BENCHMARK_SPEC to one of the three benchmark vars below.
-  # ─────────────────────────────────────────────────────────────────
+  # ════════════════════════════════════════════════════════════════════════════
+  # BENCHMARK SELECTOR
+  # Change the value below to switch benchmarks. Options:
+  #   ${benchmark_task_api}
+  #   ${benchmark_csv_pipeline}
+  #   ${benchmark_chat_server}
+  #   ${benchmark_url_shortener}
+  #   ${benchmark_expense_tracker}
+  # ════════════════════════════════════════════════════════════════════════════
   BENCHMARK_SPEC: ${benchmark_task_api}
 
-  # ── Benchmark 1: Task Management API ─────────────────────────────
+
+  # ── Benchmark 1: Task Management API ─────────────────────────────────────
+  # GROUND TRUTH
+  # required_requirements:
+  #   R1: Tasks persist between restarts (SQLite DB)
+  #   R2: Auth required before accessing tasks (JWT middleware)
+  #   R3: Task ownership — users see only their own tasks (user_id filter)
+  #   R4: Soft delete — tasks hidden not dropped (is_deleted / deleted_at column)
+  #   R5: Pagination on list endpoint (skip/limit or page params)
+  # auto_checks:
+  #   AC1: Project runs without crashing
+  #   AC2: FastAPI used (grep 'from fastapi')
+  #   AC3: SQLite used (grep 'sqlite')
+  #   AC4: JWT auth implemented (grep 'jwt|bearer|jose')
+  #   AC5: Soft delete — no hard DELETE in ORM (grep 'is_deleted|deleted_at')
+  #   AC6: Pagination params present (grep 'skip|limit|page' in routes)
+  #   AC7: Dockerfile present at project root
+  #   AC8: Test suite present and runnable (pytest exits 0)
+  #   AC9: User isolation — tasks filtered by user (grep 'user_id|owner_id')
+  # llm_judge_criteria:
+  #   LJ1 [high]:   Auth flow correct — token issued on login, verified on protected routes
+  #   LJ2 [high]:   Soft delete semantically correct — deleted tasks excluded from listing
+  #   LJ3 [medium]: Error handling — 401/404/400 returned appropriately
+  #   LJ4 [medium]: Code structure — routes, models, auth in separate modules
+  #   LJ5 [medium]: JWT secret read from env var, not hardcoded
+  # scoring: auto_checks 60% / llm_judge 40%
+  # pass condition: auto_check >= 0.7 AND all high-weight LJ pass
   benchmark_task_api: |-
     Project: Task Management REST API
 
@@ -659,8 +692,34 @@ vars:
     - If asked "which framework?", say "whatever is standard for Python APIs."
     - If asked "which database?", say "SQLite is fine, keep it simple."
     - If asked "how should auth work?", say "users should log in with a token."
+    - If asked "what happens to deleted tasks?", say "they should be hidden but recoverable."
+    - If asked about pagination, say "yes, I don't want thousands of tasks returned at once."
 
-  # ── Benchmark 2: CSV Processing Pipeline ─────────────────────────
+
+  # ── Benchmark 2: CSV Processing Pipeline ──────────────────────────────────
+  # GROUND TRUTH
+  # required_requirements:
+  #   R1: Streaming/chunked reading — file never fully loaded into memory
+  #   R2: Malformed rows skipped and logged, not crashing
+  #   R3: Output in JSON format
+  #   R4: CLI interface with arguments (argparse or equivalent)
+  #   R5: Parallel processing for performance
+  # auto_checks:
+  #   AC1: Pipeline runs on a small valid CSV without crashing (exit 0)
+  #   AC2: Output is valid JSON (python -c "import json; json.load(...)" exits 0)
+  #   AC3: Streaming used — no bare pd.read_csv without chunksize on main path
+  #   AC4: Malformed row handling — inject bad row, pipeline exits 0, log has skip entry
+  #   AC5: Parallel processing present (grep 'ProcessPoolExecutor|ThreadPoolExecutor|Pool')
+  #   AC6: CLI arguments accepted (--help exits 0 and shows usage)
+  #   AC7: Logging to file or stderr (grep 'logging.|logger.' in source)
+  # llm_judge_criteria:
+  #   LJ1 [high]:   Streaming is genuinely memory-safe — no full in-memory accumulation
+  #   LJ2 [high]:   Error handling granular — each row independent, one bad row never kills pipeline
+  #   LJ3 [high]:   Parallel impl correct — no race conditions on shared output, results merged safely
+  #   LJ4 [medium]: CLI ergonomic — --input, --output, optional --workers, --help works
+  #   LJ5 [medium]: Log informative — includes row number and reason for each skipped row
+  # scoring: auto_checks 60% / llm_judge 40%
+  # pass condition: AC1+AC2+AC4 pass (functional) AND AC3 passes (no full-load). LJ1-LJ3 all high.
   benchmark_csv_pipeline: |-
     Project: CSV Processing Pipeline
 
@@ -682,8 +741,34 @@ vars:
     - If asked about errors: "Just skip bad rows and write a log somewhere."
     - If asked about output: "JSON, one record per line is fine."
     - If asked about interface: "I want to run it from the terminal with arguments."
+    - If asked about speed: "It needs to handle big files fast, so yes optimise it."
 
-  # ── Benchmark 3: Real-Time Chat Server ───────────────────────────
+
+  # ── Benchmark 3: Real-Time Chat Server ────────────────────────────────────
+  # GROUND TRUTH
+  # required_requirements:
+  #   R1: Real-time delivery via WebSockets
+  #   R2: Persistent message history across restarts
+  #   R3: Authentication before joining rooms
+  #   R4: Multiple chat rooms supported
+  #   R5: Message ordering guaranteed (timestamp or sequence number)
+  # auto_checks:
+  #   AC1: Server starts without crashing (startup log present on timeout)
+  #   AC2: WebSocket endpoint exists (grep 'WebSocket|websocket|ws://')
+  #   AC3: Messages stored in persistent storage (grep 'INSERT|session.add|db.execute')
+  #   AC4: Room concept present (grep 'room|channel|room_id' in models and routes)
+  #   AC5: Message ordering enforced (grep 'timestamp|created_at|sequence|ORDER BY')
+  #   AC6: Auth guard before WebSocket access (grep 'token|authenticate|jwt|login' near WS handler)
+  #   AC7: Dockerfile present at project root
+  #   AC8: Async implementation used (grep 'async def|await|asyncio')
+  # llm_judge_criteria:
+  #   LJ1 [high]:   WS lifecycle correct — connect/receive/broadcast/disconnect, no leaked connections
+  #   LJ2 [high]:   Persistent history loaded on room join — new user sees past messages
+  #   LJ3 [high]:   Room isolation — messages to room A not broadcast to room B
+  #   LJ4 [medium]: Auth enforced at WS upgrade stage, not after connection
+  #   LJ5 [medium]: Server async and non-blocking — no blocking I/O in event loop
+  # scoring: auto_checks 60% / llm_judge 40%
+  # pass condition: AC1 (starts) + AC2 (WS) + AC3 (persistence). LJ1-LJ3 all high.
   benchmark_chat_server: |-
     Project: Real-Time Chat Server
 
@@ -705,3 +790,112 @@ vars:
     - If asked about persistence: "Yes, if the server restarts messages should still be there."
     - If asked about rooms: "Yes, different topics should have their own rooms."
     - If asked about scale: "We expect around 100 people online at the same time."
+    - If asked about ordering: "Yes, messages must come in the right order."
+    - If asked about auth: "Users should have to log in before they can chat."
+
+
+  # ── Benchmark 4: URL Shortener Service ────────────────────────────────────
+  # GROUND TRUTH
+  # required_requirements:
+  #   R1: Long URL → short code creation and redirect (POST /shorten + GET /{code})
+  #   R2: Custom slug support (optional custom_code param)
+  #   R3: Expiry date on links (expires_at field; 410 Gone after expiry)
+  #   R4: Click counter per link (click_count incremented on each redirect)
+  #   R5: Rate limiting per API key (429 on excess; max 100 req/min)
+  # auto_checks:
+  #   AC1: docker-compose up starts all services without error
+  #   AC2: POST /shorten creates a short link (response contains short_code)
+  #   AC3: GET /{code} redirects to original URL (HTTP 301 or 302)
+  #   AC4: Custom slug accepted (POST with custom_code; GET /custom redirects correctly)
+  #   AC5: Expired link returns 410 (create link with past expiry; verify HTTP 410)
+  #   AC6: Click counter increments (GET 3 times; stats show count=3)
+  #   AC7: Rate limit enforced (101 rapid requests; 102nd returns HTTP 429)
+  #   AC8: PostgreSQL used — not SQLite (grep 'postgresql|psycopg'; no sqlite in DB config)
+  #   AC9: Redis used for caching (grep 'redis|Redis'; cache lookup before DB on redirect)
+  # llm_judge_criteria:
+  #   LJ1 [high]:   Redirect hits Redis cache first, falls back to PostgreSQL — not DB-first
+  #   LJ2 [high]:   Expiry check uses UTC timestamps — not naive datetime
+  #   LJ3 [high]:   Rate limiting per API key using Redis counter with TTL
+  #   LJ4 [medium]: Collision handling for random short codes — retry if code already exists
+  #   LJ5 [medium]: Docker Compose defines dependencies and health checks correctly
+  # scoring: auto_checks 60% / llm_judge 40%
+  # pass condition: AC1 (compose up) + AC2 + AC3 (basic flow). AC5+AC7 are discriminating. All LJ high must pass.
+  benchmark_url_shortener: |-
+    Project: URL Shortener Service
+
+    Product requirements (the client knows these well):
+    - Users can submit a long URL and receive a short link.
+    - Short links must redirect to the original URL.
+    - Users should be able to choose a custom short code (e.g. /my-link).
+    - Short links can have an optional expiry date — after which they stop working.
+    - Each click on a short link should be counted so usage can be tracked.
+    - The service must handle many users at once without slowing down.
+
+    Technical constraints (the client may not know the exact terms):
+    - Database: PostgreSQL
+    - Caching: Redis (for fast redirect lookups)
+    - Authentication: API key per user
+    - Containerisation: Docker Compose (app + dependencies)
+    - Rate limiting: max 100 requests per minute per API key
+
+    Client persona notes:
+    - If asked about storage: "It needs to remember the links even after restart."
+    - If asked about custom links: "Yes, I want to be able to pick the short code myself."
+    - If asked about expiry: "Yes, some links should stop working after a certain date."
+    - If asked about analytics: "Just a click counter per link is enough."
+    - If asked about scale: "It should handle many users at once, don't let one user spam it."
+    - If asked about auth: "Each user has their own API key to access the service."
+
+
+  # ── Benchmark 5: Expense Tracker CLI ──────────────────────────────────────
+  # GROUND TRUTH
+  # required_requirements:
+  #   R1: Add, edit, delete expense entries with category
+  #   R2: Multi-currency support with base currency conversion
+  #   R3: Recurring expenses auto-generated monthly
+  #   R4: Monthly summary report by category
+  #   R5: CSV export of expenses
+  # auto_checks:
+  #   AC1: CLI starts and shows help without crashing (--help exits 0)
+  #   AC2: Add expense command works (add --amount 50 --currency EUR --category food exits 0)
+  #   AC3: List command shows added expense (list output contains added entry)
+  #   AC4: Currency conversion applied (EUR expense listed in GBP base differs by exchange rate)
+  #   AC5: Recurring expense re-appears after DB entry removed for current month
+  #   AC6: Monthly report by category produced (report --month YYYY-MM groups by category)
+  #   AC7: CSV export produced (export --output expenses.csv; valid CSV file created)
+  #   AC8: Data persists between runs (add expense; restart process; list shows same entry)
+  #   AC9: SQLite database file created after first run
+  # llm_judge_criteria:
+  #   LJ1 [high]:   Currency conversion consistent — all amounts in base currency OR converted at display, never mixed
+  #   LJ2 [high]:   Recurring logic correct — generates exactly once per month, no duplicates on re-run
+  #   LJ3 [high]:   Monthly report correctly aggregates by category and month — no off-by-one on boundaries
+  #   LJ4 [medium]: CLI intuitive — commands discoverable via --help; error messages clear
+  #   LJ5 [medium]: CSV export includes all fields: date, amount, currency, converted_amount, category, description
+  # scoring: auto_checks 60% / llm_judge 40%
+  # pass condition: AC1+AC2+AC3+AC8 (basic CRUD + persistence). AC4+AC5 are discriminating. All LJ high must pass.
+  benchmark_expense_tracker: |-
+    Project: Expense Tracker
+
+    Product requirements (the client knows these well):
+    - Users can add, edit, and delete expense entries.
+    - Each expense must have a category (e.g. food, transport, utilities).
+    - Expenses can be in different currencies; the app converts them to a base currency.
+    - Some expenses repeat monthly (e.g. rent, subscriptions) — these should be entered once.
+    - Users should be able to see a summary of spending by category for a given month.
+    - Data must be exportable to CSV.
+    - All data must persist between sessions.
+
+    Technical constraints (the client may not know the exact terms):
+    - Interface: command-line (CLI), not a web app
+    - Database: SQLite
+    - Currency conversion: use a fixed exchange rate table (no live API needed)
+    - Recurring expenses: auto-generated for current month if not yet present
+    - Export: CSV export of all expenses or filtered by date range
+
+    Client persona notes:
+    - If asked about interface: "Just a command-line tool, nothing fancy."
+    - If asked about currencies: "Yes, I travel a lot, I need euros, dollars, pounds at least."
+    - If asked about recurring: "Yes, my rent is the same every month, I don't want to enter it manually."
+    - If asked about reports: "I want to see where my money went each month, broken down by category."
+    - If asked about export: "Yes, I want to export to a spreadsheet sometimes."
+    - If asked about persistence: "Yes, I need to see last month's expenses when I open it again."

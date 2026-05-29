@@ -3,6 +3,7 @@
 import os
 import re
 import subprocess
+import signal
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence
 
@@ -160,39 +161,53 @@ def _run_uv_command(
     timeout_value = _DEFAULT_TIMEOUT if timeout is None else timeout
     env_vars = None if env is None else {**os.environ, **env}
     try:
-        completed = subprocess.run(
+        # Start the process in a new session so we can kill its whole process group
+        proc = subprocess.Popen(
             cmd,
             cwd=str(workspace_root),
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout_value,
-            check=False,
             env=env_vars,
+            start_new_session=True,
         )
+        try:
+            stdout_text, stderr_text = proc.communicate(timeout=timeout_value)
+        except subprocess.TimeoutExpired:
+            # Try to terminate the whole process group (children included)
+            try:
+                pgid = os.getpgid(proc.pid)
+                os.killpg(pgid, signal.SIGTERM)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+            # collect any remaining output
+            try:
+                stdout_text, stderr_text = proc.communicate(timeout=5)
+            except Exception:
+                stdout_text, stderr_text = "", ""
+            message = _build_timeout_message(step, timeout_value, stdout_text, stderr_text)
+            return {
+                "command": cmd,
+                "stdout": stdout_text,
+                "stderr": stderr_text,
+                "returncode": None,
+                "step": step,
+                "timed_out": True,
+                "timeout": timeout_value,
+                "error": message,
+            }
+        completed = proc
     except FileNotFoundError as exc:
         raise RuntimeError("uv command not found in PATH") from exc
-    except subprocess.TimeoutExpired as exc:
-        stdout_text = exc.stdout
-        if stdout_text is None:
-            stdout_text = getattr(exc, "output", "") or ""
-        stderr_text = exc.stderr or ""
-        message = _build_timeout_message(step, timeout_value, stdout_text, stderr_text)
-        return {
-            "command": cmd,
-            "stdout": stdout_text,
-            "stderr": stderr_text,
-            "returncode": None,
-            "step": step,
-            "timed_out": True,
-            "timeout": timeout_value,
-            "error": message,
-        }
 
     return {
         "command": cmd,
-        "stdout": completed.stdout or "",
-        "stderr": completed.stderr or "",
-        "returncode": completed.returncode,
+        "stdout": (completed.stdout or "") if hasattr(completed, "stdout") else "",
+        "stderr": (completed.stderr or "") if hasattr(completed, "stderr") else "",
+        "returncode": completed.returncode if hasattr(completed, "returncode") else 0,
         # "cwd": str(workspace_root),
         "step": step,
     }

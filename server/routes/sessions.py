@@ -42,9 +42,14 @@ async def download_session(session_id: str):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
             zip_path = Path(tmp_file.name)
 
-        archive_base = zip_path.with_suffix("")
         try:
-            shutil.make_archive(str(archive_base), "zip", root_dir=WARE_HOUSE_DIR, base_dir=dir_name)
+            import zipfile
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for file in session_path.rglob("*"):
+                    if ".venv" in file.parts:
+                        continue
+                    if file.is_file():
+                        zf.write(file, file.relative_to(WARE_HOUSE_DIR))
         except Exception as exc:
             if zip_path.exists():
                 zip_path.unlink()
@@ -82,3 +87,4 @@ async def download_session(session_id: str):
         logger = get_server_logger()
         logger.log_exception(exc, f"Unexpected error during session download: {session_id}")
         raise HTTPException(status_code=500, detail="Failed to download session")
+

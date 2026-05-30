@@ -335,7 +335,8 @@ graph:
           2) Attempt minimal smoke runs of the project's entrypoints (start main scripts or servers) with short timeouts to confirm the program starts without crashing and emits startup logs.
           3) Run the existing test suite if present; otherwise run lightweight compile/import and smoke tests.
           4) Collect and report stdout, stderr, exit codes, and whether startup logs indicate successful start.
-          5) If tests or runs fail, identify failing cases and provide reproduction steps and likely root causes.
+          5) If tests or runs fail, identify failing cases and provide reproduction steps and likely root causes and Output ashort error description: "Tool X failed because ...".
+              Then end with "<INFO> Problem Found". This ensures the loop continues and the problem is reported.
 
           Important timeout guidance:
           - Always pass `timeout_seconds` to `uv_run`; use a short timeout for smoke runs of servers, GUIs, games, or any program expected to keep running.
@@ -345,6 +346,7 @@ graph:
           Critical constraints:
           - You DO NOT modify code yourself.
           - You only identify and report build/compile/run and test failures based on actual attempts.
+          - You MUST NOT call any other tool not explicitly listed in your tooling configuration. Use only uv_run for executing commands
 
           Output rules:
           - If problems exist: report them in a short bullet list (1-4 items) with a brief explanation; end with "<INFO> Problem Found".

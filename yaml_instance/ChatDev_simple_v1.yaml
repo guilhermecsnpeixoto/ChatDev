@@ -239,15 +239,30 @@ graph:
           files, output "<INFO> Finished".
 
           Your responsibilities:
-          1) Call `describe_available_files` (once) to list files in the workspace and decide which files to inspect.
+          1) Call `describe_available_files` exactly once to list files in the workspace and decide which files to inspect.
           2) Call `read_file_segment` only for the files you will review; batch reads where possible and cache results.
-          3) Review the actual code against specifications, identifying:
-             - infinite loops or deadlocks
-             - unimplemented or incomplete methods/functions
-             - logic bugs and potential runtime errors
-             - missing imports or unresolved references
-             - reliability and robustness concerns
-          4) Provide clear, specific, and actionable feedback — precise enough that the Programmer does not need to guess.
+          3) Review the actual code against the specifications, identifying and counting issues by severity:
+
+              Critical:
+              - Infinite loops or deadlocks
+              - Code that crashes at runtime
+              - Missing imports or unresolved references
+              - Required functions left unimplemented
+
+              High:
+              - Logic bugs that produce incorrect outputs
+              - Bad assumptions that break common valid inputs
+
+              Medium:
+              - Weak error handling
+              - Poor edge-case handling
+              - Fragile file paths or hardcoded values
+
+              Low:
+              - Style, readability, duplication, minor maintainability issues
+
+          4) Report findings in severity order: Critical first, then High, then Medium, then Low.
+          5) Provide clear, specific, and actionable feedback — precise enough that the Programmer does not need to guess what to fix.
 
           Communicative dehallucination protocol (MANDATORY):
           The Programmer will ask you clarifying questions before acting on your comment.
@@ -264,7 +279,20 @@ graph:
           - Only report issues you can point to in the actual loaded source code.
 
           Output rules:
-          - If reporting a new problem: numbered list of issues with suggested fixes; end with "<INFO> Problem Found".
+          - If reporting new problems: Report the number of issues found by severity, using the format:
+            "X Critical issues were found. Y High issues were found. Z Medium issues were found. W Low issues were found."
+
+            Then provide a numbered list of issues grouped by severity:
+            1) [Critical] ...
+              Suggested fix: ...
+            2) [Critical] ...
+              Suggested fix: ...
+            3) [High] ...
+              Suggested fix: ...
+            4) [Medium] ...
+              Suggested fix: ...
+
+            End with "<INFO> Problem Found".         
           - If answering the Programmer's clarifying questions: specific answers; end with "<INFO> Problem Found".
           - If no relevant problems remain: output exactly "<INFO> Finished".
         base_url: ${BASE_URL}
@@ -320,7 +348,7 @@ graph:
 
           Output rules:
           - If problems exist: report them in a short bullet list (1-4 items) with a brief explanation; end with "<INFO> Problem Found".
-          - If nothing more to test or no problems: output "<INFO> Finished" followed by a short summary (2-4 bullets) of what was tested and results.
+          - If nothing more to test or no problems: output a short summary (2-4 bullets) of what was tested and results followed by "<INFO> Finished".
         base_url: ${BASE_URL}
         api_key: ${API_KEY}
         params: {}

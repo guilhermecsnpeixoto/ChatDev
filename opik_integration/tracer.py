@@ -3,12 +3,16 @@ from __future__ import annotations
 import json
 import os
 import threading
-import time
 import uuid
+from importlib import import_module
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
-import opik 
 from dotenv import load_dotenv
+
+try:
+    opik = import_module("opik")
+except Exception:
+    opik = None
 
 
 DEFAULT_OPIK_HOST = "https://www.comet.com/opik/api"
@@ -21,6 +25,7 @@ class OpikTraceContext:
     thread_id: str
     run_id: str
     name: str
+    task_id: str
 
 
 class OpikTracer:
@@ -35,6 +40,7 @@ class OpikTracer:
         workspace: Optional[str] = None,
         thread_id: Optional[str] = None,
         run_id: Optional[str] = None,
+        task_id: Optional[str] = None,
         enabled: bool = True,
     ) -> None:
         self.project_name = project_name
@@ -43,10 +49,13 @@ class OpikTracer:
         self.workspace = workspace
         self.thread_id = thread_id or ""
         self.run_id = run_id or ""
+        self.task_id = task_id or ""
         self.enabled = bool(enabled and api_key and project_name and opik is not None)
         self._lock = threading.Lock()
         self._active_traces: Dict[str, Any] = {}
         self._active_spans: Dict[str, Any] = {}
+        self._completed_span_ids: set[str] = set()
+        self._thread_tagged = False
 
         if self.enabled and opik is not None:
             try:
@@ -65,11 +74,15 @@ class OpikTracer:
         if not self.enabled:
             return None
 
-        trace_metadata = metadata or {}
+        if not self.thread_id:
+            self.thread_id = thread_id
+
+        trace_metadata = dict(metadata or {})
         trace_cm = opik.start_as_current_trace(
             name,
             project_name=self.project_name,
             thread_id=thread_id,
+            tags=[self.task_id] if self.task_id else None,
         )
         trace_obj = trace_cm.__enter__()
         trace_obj.input = _safe_jsonable(input_payload)
@@ -85,6 +98,7 @@ class OpikTracer:
             thread_id=thread_id,
             run_id=self.run_id or thread_id,
             name=name,
+            task_id=self.task_id,
         )
 
     def end_trace(
@@ -125,6 +139,7 @@ class OpikTracer:
         except Exception:
             pass
 
+
     def start_span(
         self,
         trace_id: str,
@@ -136,14 +151,26 @@ class OpikTracer:
     ) -> str:
         if not self.enabled:
             return _random_id()
+
+        self._discard_completed_span_contexts()
+        safe_input = _safe_jsonable(input_payload)
+        span_metadata = dict(metadata or {})
         span_cm = opik.start_as_current_span(
             name,
             type=span_type,
+            input=safe_input,
+            metadata=span_metadata,
             project_name=self.project_name,
+            model=_metadata_str(span_metadata, "model"),
+            provider=_metadata_str(span_metadata, "provider"),
+            opik_distributed_trace_headers={
+                "opik_trace_id": trace_id,
+                "opik_parent_span_id": None,
+            },
         )
         span_obj = span_cm.__enter__()
-        span_obj.input = _safe_jsonable(input_payload)
-        span_obj.metadata = metadata or {}
+        span_obj.input = safe_input
+        span_obj.metadata = span_metadata
 
         span_id = getattr(span_obj, "id", None) or _random_id()
         span_id = str(span_id)
@@ -206,9 +233,61 @@ class OpikTracer:
             span_cm.__exit__(None, None, None)
         except Exception:
             pass
+        finally:
+            self._discard_span_context(span_id)
+            self._discard_completed_span_contexts()
+
+    def _discard_span_context(self, span_id: str) -> None:
+        context_storage = getattr(opik, "context_storage", None)
+        top_span_data = getattr(context_storage, "top_span_data", None)
+        pop_span_data = getattr(context_storage, "pop_span_data", None)
+        if not callable(top_span_data) or not callable(pop_span_data):
+            return
+
+        top_span = top_span_data()
+        if top_span is None:
+            return
+
+        top_span_id = str(getattr(top_span, "id", "") or "")
+        if top_span_id == span_id:
+            popped = pop_span_data(ensure_id=span_id)
+            if popped is not None:
+                return
+
+        with self._lock:
+            self._completed_span_ids.add(span_id)
+
+    def _discard_completed_span_contexts(self) -> None:
+        context_storage = getattr(opik, "context_storage", None)
+        top_span_data = getattr(context_storage, "top_span_data", None)
+        pop_span_data = getattr(context_storage, "pop_span_data", None)
+        if not callable(top_span_data) or not callable(pop_span_data):
+            return
+
+        for _ in range(100):
+            top_span = top_span_data()
+            top_span_id = str(getattr(top_span, "id", "") or "")
+            if not top_span_id:
+                return
+            with self._lock:
+                should_pop = top_span_id in self._completed_span_ids
+            if not should_pop:
+                return
+
+            popped = pop_span_data(ensure_id=top_span_id)
+            if popped is None:
+                return
+            with self._lock:
+                self._completed_span_ids.discard(top_span_id)
 
 
-def build_opik_tracer(*, session_id: Optional[str], workflow_id: Optional[str]) -> OpikTracer:
+
+def build_opik_tracer(
+    *,
+    session_id: Optional[str],
+    workflow_id: Optional[str],
+    task_id: Optional[str] = None,
+) -> OpikTracer:
     if load_dotenv is not None:
         try:
             load_dotenv()
@@ -229,6 +308,7 @@ def build_opik_tracer(*, session_id: Optional[str], workflow_id: Optional[str]) 
         workspace=workspace,
         thread_id=thread_id,
         run_id=run_id,
+        task_id=task_id,
         enabled=bool(api_key and project_name),
     )
 
@@ -272,6 +352,13 @@ def _clip_text(text: str, max_chars: int) -> str:
     if len(text) <= max_chars:
         return text
     return text[: max_chars - 20] + "...[truncated]"
+
+
+def _metadata_str(metadata: Dict[str, Any], key: str) -> Optional[str]:
+    value = metadata.get(key)
+    if value is None:
+        return None
+    return str(value)
 
 
 def _random_id() -> str:

@@ -8,7 +8,7 @@ from runtime.node.agent.thinking import ThinkingManagerBase, ThinkingManagerFact
 from entity.configs import Node, EdgeLink, AgentConfig, ConfigError
 from entity.configs.edge import EdgeConditionConfig
 from entity.configs.node.memory import SimpleMemoryConfig
-from entity.messages import Message, MessageRole
+from entity.messages import Message, MessageRole, MessageBlock
 from runtime.node.executor.base import ExecutionContext
 from runtime.node.executor.factory import NodeExecutorFactory
 from utils.logger import WorkflowLogger
@@ -742,7 +742,10 @@ class GraphExecutor:
             if self.majority_result is None:
                 return None
             if isinstance(self.majority_result, Message):
-                return self.majority_result.clone()
+                msg = self.majority_result.clone()
+                header = MessageBlock.text_block(f"=== OUTPUT FROM MAJORITY_VOTE ({msg.role.value}) ===\n\n")
+                new_blocks = [header] + [block.copy() for block in msg.blocks()]
+                return msg.with_content(new_blocks)
             return self._create_message(MessageRole.ASSISTANT, str(self.majority_result), "MAJORITY_VOTE")
 
         final_node = self._get_final_node()
@@ -750,9 +753,16 @@ class GraphExecutor:
             return None
         if final_node.output:
             value = final_node.output[-1]
+            source = final_node.id
             if isinstance(value, Message):
-                return value.clone()
-            return self._create_message(MessageRole.ASSISTANT, str(value), final_node.id)
+                msg = value.clone()
+                header = MessageBlock.text_block(f"=== OUTPUT FROM {source} ({msg.role.value}) ===\n\n")
+                new_blocks = [header] + [block.copy() for block in msg.blocks()]
+                return msg.with_content(new_blocks)
+            # create a Message and prepend header
+            text = str(value)
+            header_text = f"=== OUTPUT FROM {source} (assistant) ===\n\n"
+            return self._create_message(MessageRole.ASSISTANT, header_text + text, source)
         return None
 
     def get_final_output_messages(self) -> List[Message]:
@@ -767,10 +777,16 @@ class GraphExecutor:
         
         results = []
         for value in final_node.output:
+            source = final_node.id
             if isinstance(value, Message):
-                results.append(value.clone())
+                msg = value.clone()
+                header = MessageBlock.text_block(f"=== OUTPUT FROM {source} ({msg.role.value}) ===\n\n")
+                new_blocks = [header] + [block.copy() for block in msg.blocks()]
+                results.append(msg.with_content(new_blocks))
             else:
-                results.append(self._create_message(MessageRole.ASSISTANT, str(value), final_node.id))
+                text = str(value)
+                header_text = f"=== OUTPUT FROM {source} (assistant) ===\n\n"
+                results.append(self._create_message(MessageRole.ASSISTANT, header_text + text, source))
         return results
 
     def _get_final_node(self) -> Node:

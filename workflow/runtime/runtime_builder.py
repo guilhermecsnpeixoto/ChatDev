@@ -1,6 +1,8 @@
 """Builder that assembles the runtime context for workflow execution."""
 
 from dataclasses import dataclass
+import re
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from runtime.node.agent import ToolManager
@@ -42,7 +44,15 @@ class RuntimeBuilder:
             "attachment_store": attachment_store,
         }
 
-        opik_tracer = build_opik_tracer(session_id=session_id, workflow_id=self.graph.name)
+        task_id = self._extract_task_id()
+        if task_id:
+            global_state["task_id"] = task_id
+
+        opik_tracer = build_opik_tracer(
+            session_id=session_id,
+            workflow_id=self.graph.name,
+            task_id=task_id,
+        )
         global_state["opik_tracer"] = opik_tracer
 
         context = RuntimeContext(
@@ -60,3 +70,23 @@ class RuntimeBuilder:
         if session_id:
             context.global_state.setdefault("session_id", session_id)
         return context
+
+    def _extract_task_id(self) -> Optional[str]:
+        source_path = self.graph.config.get_source_path()
+        if not source_path:
+            return self.graph.name or None
+
+        path = Path(source_path)
+        if path.exists():
+            try:
+                content = path.read_text(encoding="utf-8")
+            except Exception:
+                content = ""
+            match = re.search(r"BENCHMARK_SPEC:\s*\$\{([^}]+)\}", content)
+            if match:
+                return match.group(1)
+
+        stem = path.stem
+        if stem.startswith("tmp_"):
+            stem = stem[4:]
+        return stem or self.graph.name or None

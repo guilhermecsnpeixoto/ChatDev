@@ -191,9 +191,13 @@ class AgentNodeExecutor(NodeExecutor):
             self._update_memory(node, input_data, inputs, final_message)
 
             if isinstance(final_message, Message):
-                trace_output = final_message.text_content()
+                # Include provenance header in the opik trace output, but do not modify the message
+                header_text = f"=== OUTPUT FROM {node.id} ({final_message.role.value}) ===\n\n"
+                trace_output = header_text + final_message.text_content()
                 return [self._clone_with_source(final_message, node.id)]
-            trace_output = str(final_message)
+            # Plain-string result: include header in opik trace as well
+            header_text = f"=== OUTPUT FROM {node.id} (assistant) ===\n\n"
+            trace_output = header_text + str(final_message)
             return [self._build_message(
                 role=MessageRole.ASSISTANT,
                 content=final_message,

@@ -5,6 +5,7 @@ Defines the interfaces that every node executor must implement.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+import re
 from typing import Any, Dict, Optional, List
 
 from entity.configs import Node
@@ -113,8 +114,10 @@ class NodeExecutor(ABC):
         parts: list[str] = []
         for message in inputs:
             source = message.metadata.get("source", "UNKNOWN")
+            content = message.text_content()
+            content = re.sub(r"(?m)^=== INPUT FROM [^\n]+ ===\n{0,2}", "", content).strip()
             parts.append(
-                f"=== INPUT FROM {source} ({message.role.value}) ===\n\n{message.text_content()}"
+                f"=== INPUT FROM {source} ({message.role.value}) ===\n\n{content}"
             )
         return "\n\n".join(parts)
 

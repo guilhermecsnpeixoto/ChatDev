@@ -128,3 +128,48 @@ def code_save_and_run(data: str, _context: Dict[str, Any]) -> str:
         execution_result = f"Error: {e}"
 
     return cleaned_code_str + "\n\n" + execution_result
+
+
+def merge_programmer_output_and_tester_summary(data: str, _context: Dict[str, Any]) -> str:
+    """Extract the last 'INPUT FROM Programmer' block from the combined inputs and
+    return a message that starts with the programmer output followed by the tester summary.
+
+    Also reset the 'Review Loop Counter' count in the provided global state if present.
+    The second argument _context is expected to be the execution global_state dict.
+    """
+    # data is the tester payload text, which may include prior trace headers.
+    programmer_block = None
+
+    def _strip_trace_headers(text: str) -> str:
+        text = re.sub(r"(?m)^=== INPUT FROM [^\n]+ ===\n{0,2}", "", text)
+        text = re.sub(r"(?m)^=== OUTPUT FROM [^\n]+ ===\n{0,2}", "", text)
+        return text.strip()
+
+    # Find all INPUT FROM blocks and take the last one labeled Programmer
+    matches = re.findall(r"=== INPUT FROM (.+?) \([^\)]+\) ===\n\n(.*?)($|\n\n=== INPUT FROM )", data, flags=re.S)
+    for m in matches[::-1]:
+        source = m[0]
+        content = m[1]
+        if source.strip().startswith("Programmer"):
+            programmer_block = _strip_trace_headers(content)
+            break
+
+    # Reset loop counter if global_state provided
+    try:
+        gs = _context or {}
+        if isinstance(gs, dict):
+            lc = gs.setdefault("loop_counter", {})
+            counter = lc.get("Review Loop Counter")
+            if isinstance(counter, dict):
+                counter["count"] = 0
+    except Exception:
+        pass
+
+    cleaned_data = _strip_trace_headers(data or "")
+
+    parts = []
+    if programmer_block:
+        parts.append(programmer_block)
+    if cleaned_data:
+        parts.append(cleaned_data)
+    return "\n\n".join(parts)

@@ -286,8 +286,12 @@ graph:
         provider: openrouter
         role: |-
           ${COMMON_PROMPT}
-          Tooling guidance: Call `describe_available_files` once per review phase then `read_file_segment`
-          only for files you will inspect; cache results and avoid unnecessary repeat calls.
+          Tool call safety:
+          - Use only the exact tools listed in your tooling configuration.
+          - Do not invent tool names, arguments, parameters, or nested JSON fields.
+          - First call `describe_available_files` exactly once.
+          - Then call `read_file_segment` only for files you need to inspect, using minimal valid arguments.
+          - If any tool call fails, stop using tools, explain the tool failure briefly, and end with "<INFO> Problem Found".
 
           Language constraint: All development, examples, and implementation details must be provided in Python.
           You are the Code Reviewer.
@@ -302,6 +306,7 @@ graph:
           1) Call `describe_available_files` exactly once to list files in the workspace and decide which files to inspect.
           2) Call `read_file_segment` only for the files you will review; batch reads where possible and cache results.
           3) Review the actual code against the specifications, identifying and counting issues by severity:
+          
 
               Critical:
               - Infinite loops or deadlocks
@@ -448,7 +453,7 @@ graph:
     - id: Test Loop Counter
       type: loop_counter
       config:
-        max_iterations: 3
+        max_iterations: 2
         reset_on_emit: true
         message: ''
       description: ''
@@ -608,6 +613,7 @@ graph:
       process: null
 
     # Test loop
+    # Test loop
     - from: Tester
       to: Programmer
       trigger: true
@@ -623,7 +629,10 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process: null
+      process:
+        type: function
+        config:
+          name: merge_programmer_output_and_tester_summary
 
     - from: Tester
       to: Test Loop Counter
@@ -642,6 +651,28 @@ graph:
       clear_kept_context: false
       process: null
 
+    # Keep Test Loop Counter inside the Programmer/Reviewer/Tester cycle.
+    # Without this static back-edge, the scheduler treats Tester -> Test Loop Counter
+    # as an external-node trigger and exits the cycle before Tester -> Programmer runs.
+    # The condition is intentionally impossible, so this edge never carries data.
+    - from: Test Loop Counter
+      to: Programmer
+      trigger: true
+      condition:
+        type: keyword
+        config:
+          any:
+            - __NEVER_ROUTE_TEST_COUNTER_TO_PROGRAMMER__
+          none: []
+          regex: []
+          case_sensitive: true
+      carry_data: true
+      keep_message: false
+      clear_context: false
+      clear_kept_context: false
+      process: null
+
+    # When the test retry limit is reached, the loop counter emits and the run ends.
     - from: Test Loop Counter
       to: FINAL
       trigger: true

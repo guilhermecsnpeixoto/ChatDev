@@ -253,10 +253,81 @@ class FunctionEdgeProcessorConfig(EdgeProcessorTypeConfig):
         return {"name": self.name}
 
 
+@dataclass
+class ResetLoopCounterEdgeProcessorConfig(EdgeProcessorTypeConfig):
+    """Configuration for resetting a loop counter node state by ID."""
+
+    counter_id: str = ""
+
+    FIELD_SPECS = {
+        "counter_id": ConfigFieldSpec(
+            name="counter_id",
+            display_name="Loop Counter Node ID",
+            type_hint="str",
+            required=True,
+            description="ID of the loop_counter node whose iteration state should be reset.",
+        )
+    }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any], *, path: str) -> "ResetLoopCounterEdgeProcessorConfig":
+        mapping = require_mapping(data, path)
+        counter_id = require_str(mapping, "counter_id", path, allow_empty=False)
+        return cls(counter_id=counter_id, path=path)
+
+    def display_label(self) -> str:
+        return f"reset_loop_counter({self.counter_id})"
+
+    def to_external_value(self) -> Any:
+        return {"counter_id": self.counter_id}
+    def to_external_value(self) -> Any:
+        return {"counter_id": self.counter_id}
+
+
 TProcessorConfig = TypeVar("TProcessorConfig", bound=EdgeProcessorTypeConfig)
 
 
 @dataclass
+class AttachFileEdgeProcessorConfig(EdgeProcessorTypeConfig):
+    """Configuration for attaching files to edge payloads."""
+
+    path: str | list[str] = ""
+    as_markdown: bool = True
+
+    FIELD_SPECS = {
+        "path": ConfigFieldSpec(
+            name="path",
+            display_name="File Path(s)",
+            type_hint="str",
+            required=True,
+            description="Relative path or list of paths to files to attach to the message payload.",
+        ),
+        "as_markdown": ConfigFieldSpec(
+            name="as_markdown",
+            display_name="Wrap as Markdown",
+            type_hint="bool",
+            required=False,
+            default=True,
+            description="If true, file contents are wrapped in a markdown code fence (```python).",
+        ),
+    }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any], *, path: str) -> "AttachFileEdgeProcessorConfig":
+        mapping = require_mapping(data, path)
+        p = mapping.get("path")
+        if p is None:
+            raise ConfigError("path is required", extend_path(path, "path"))
+        as_md = optional_bool(mapping, "as_markdown", path, default=True)
+        return cls(path=p, as_markdown=bool(as_md))
+
+    def display_label(self) -> str:
+        return f"attach_file({self.path})"
+
+    def to_external_value(self) -> Any:
+        return {"path": self.path, "as_markdown": self.as_markdown}
+
+
 class EdgeProcessorConfig(BaseConfig):
     """Wrapper config storing processor type and payload."""
 

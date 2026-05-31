@@ -44,6 +44,7 @@ dependencies = [
     "xhtml2pdf>=0.2.17",
     "mem0ai>=1.0.9",
     "alembic>=1.18.4",
+    "tqdm>=4.67.3",
 ]
 
 [build-system]

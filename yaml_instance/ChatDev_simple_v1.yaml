@@ -600,15 +600,6 @@ graph:
       description: Terminal node when testing confirms completion.
       context_window: 0
       config: {}
-    - id: Review Loop Counter
-      type: loop_counter
-      config:
-        max_iterations: 3
-        reset_on_emit: true
-        message: ''
-      description: ''
-      context_window: 0
-      log_output: true
   edges:
     - from: Client Liaison
       to: Human Input
@@ -692,36 +683,6 @@ graph:
           none: []
           regex: []
           case_sensitive: true
-      carry_data: true
-      keep_message: false
-      clear_context: false
-      clear_kept_context: false
-      process: null
-      dynamic: null
-    - from: Code Reviewer
-      to: Review Loop Counter
-      trigger: true
-      condition:
-        type: keyword
-        config:
-          any: []
-          none:
-            - <INFO> Finished
-          regex: []
-          case_sensitive: true
-      carry_data: true
-      keep_message: false
-      clear_context: false
-      clear_kept_context: false
-      process: null
-      dynamic: null
-    - from: Review Loop Counter
-      to: Tester
-      trigger: true
-      condition:
-        type: function
-        config:
-          name: 'true'
       carry_data: true
       keep_message: false
       clear_context: false

@@ -1,12 +1,12 @@
 """
-ChatDev Benchmark Runner
-Runs all 5 benchmarks in parallel, polls for completion, and downloads results.
+ChatDev Ablation Benchmark Runner
+Runs all 5 benchmarks WITHOUT Client Liaison — CEO receives prompt directly.
 
 Usage:
     pip install httpx websockets
-    python run_benchmarks.py
+    python run_benchmarks_ablation.py
 
-Results are saved to ./benchmark_results/<benchmark_name>_<session_id>.zip
+Results are saved to ./benchmark_results_ablation/<benchmark_name>_<session_id>.zip
 """
 
 from __future__ import annotations
@@ -28,18 +28,18 @@ WS_URL = "ws://localhost:6400/ws"
 YAML_PATH = (
     r"C:\Users\Daniel Fernandes\OneDrive - Universidade do Algarve"
     r"\Ambiente de Trabalho\Universidade\AASMA\Projeto\ChatDev"
-    r"\yaml_instance\ChatDev_simple_benchmarks_v1.yaml"
+    r"\yaml_instance\ChatDev_benchmarks_ablation.yaml"
 )
-OUTPUT_DIR = Path("benchmark_results")
+OUTPUT_DIR = Path("benchmark_results_ablation")
 POLL_INTERVAL = 15
 MAX_POLL_TIME = 60 * 30
 
 BENCHMARKS = {
-    "benchmark_task_api":        "I need a task management REST API built.",
-    "benchmark_csv_pipeline":    "I need a CSV processing pipeline built.",
-    "benchmark_chat_server":     "I need a real-time chat server built.",
-    "benchmark_url_shortener":   "I need a URL shortener service built.",
-    "benchmark_expense_tracker": "I need an expense tracker CLI built.",
+    "benchmark_task_api":       "I need a task management REST API built.",
+    "benchmark_csv_pipeline":   "I need a CSV processing pipeline built.",
+    "benchmark_chat_server":    "I need a real-time chat server built.",
+    "benchmark_url_shortener":  "I need a URL shortener service built.",
+    "benchmark_expense_tracker":"I need an expense tracker CLI built.",
 }
 
 BENCHMARK_SPEC_PATTERN = re.compile(r"(BENCHMARK_SPEC:\s*)\$\{[^}]+\}")
@@ -125,7 +125,7 @@ async def poll_and_download(
                 except zipfile.BadZipFile:
                     pass
             elif resp.status_code == 500:
-                print(f"[{benchmark_name}] Server error (500) — stopping poll")
+                print(f"[{benchmark_name}] Server error on download — stopping poll")
                 break
         except (httpx.HTTPStatusError, httpx.RequestError):
             pass
@@ -175,7 +175,7 @@ async def run_benchmark(
         "finished_at": None,
     }
 
-    yaml_filename = f"tmp_{benchmark_name}.yaml"
+    yaml_filename = f"ablation_{benchmark_name}.yaml"
     done_event = asyncio.Event()
 
     async with httpx.AsyncClient() as client:
@@ -230,7 +230,7 @@ async def main():
         print(f"ERROR: YAML file not found at:\n  {YAML_PATH}")
         sys.exit(1)
 
-    print(f"Starting {len(BENCHMARKS)} benchmarks in parallel...\n")
+    print(f"Starting {len(BENCHMARKS)} ablation benchmarks in parallel...\n")
     start = datetime.now()
 
     tasks = [
@@ -241,7 +241,7 @@ async def main():
 
     elapsed = (datetime.now() - start).seconds // 60
     print(f"\n{'─' * 60}")
-    print(f"All benchmarks finished in ~{elapsed} minutes\n")
+    print(f"All ablation benchmarks finished in ~{elapsed} minutes\n")
 
     for r in results:
         status_icon = "✓" if r["status"] == "success" else "✗"

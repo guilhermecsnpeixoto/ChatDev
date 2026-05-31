@@ -27,3 +27,5 @@ node_modules/
 data/
 temp/
 WareHouse/
+yaml_instance/tmp*
+benchmark_results/

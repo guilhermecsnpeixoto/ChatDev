@@ -606,7 +606,6 @@ graph:
       process: null
 
     # Test loop
-    # Test loop
     - from: Tester
       to: Programmer
       trigger: true
@@ -622,10 +621,7 @@ graph:
       keep_message: false
       clear_context: false
       clear_kept_context: false
-      process:
-        type: function
-        config:
-          name: merge_programmer_output_and_tester_summary
+      process: null
 
     - from: Tester
       to: Test Loop Counter

@@ -30,6 +30,7 @@ YAML_PATH = (
     r"\Ambiente de Trabalho\Universidade\AASMA\Projeto\ChatDev"
     r"\yaml_instance\ChatDev_simple_benchmarks_v1.yaml"
 )
+YAML_INSTANCE_DIR = Path(YAML_PATH).parent
 OUTPUT_DIR = Path("benchmark_results")
 POLL_INTERVAL = 15
 MAX_POLL_TIME = 60 * 30
@@ -58,23 +59,6 @@ def patch_yaml(template: str, benchmark_name: str) -> str:
     if f"${{{benchmark_name}}}" not in patched:
         raise ValueError(f"Could not patch BENCHMARK_SPEC for {benchmark_name}")
     return patched
-
-
-async def upload_yaml(client: httpx.AsyncClient, content: str, filename: str) -> None:
-    put_resp = await client.put(
-        f"{BASE_URL}/api/workflows/{filename}/update",
-        json={"content": content},
-        timeout=30,
-    )
-    if put_resp.status_code == 404:
-        post_resp = await client.post(
-            f"{BASE_URL}/api/workflows/upload/content",
-            json={"filename": filename, "content": content},
-            timeout=30,
-        )
-        post_resp.raise_for_status()
-    else:
-        put_resp.raise_for_status()
 
 
 async def execute_workflow(
@@ -163,7 +147,7 @@ async def ws_keep_alive(
 async def run_benchmark(
     benchmark_name: str,
     task_prompt: str,
-    yaml_template: str,
+    yaml_filename: str,
     output_dir: Path,
 ) -> dict:
     result = {
@@ -175,15 +159,10 @@ async def run_benchmark(
         "finished_at": None,
     }
 
-    yaml_filename = f"tmp_{benchmark_name}.yaml"
     done_event = asyncio.Event()
 
     async with httpx.AsyncClient() as client:
         try:
-            patched = patch_yaml(yaml_template, benchmark_name)
-            print(f"[{benchmark_name}] Uploading YAML...")
-            await upload_yaml(client, patched, yaml_filename)
-
             print(f"[{benchmark_name}] Connecting WebSocket...")
             session_id, ws = await ws_connect_and_get_session()
             result["session_id"] = session_id
@@ -194,6 +173,9 @@ async def run_benchmark(
             )
 
             print(f"[{benchmark_name}] Starting execution...")
+            print(f"[{benchmark_name}] Starting execution...")
+            print(f"[{benchmark_name}] Prompt: {task_prompt}")
+            print(f"[{benchmark_name}] YAML: {yaml_filename}")
             await execute_workflow(client, yaml_filename, session_id, task_prompt)
             print(f"[{benchmark_name}] Running — polling every {POLL_INTERVAL}s...")
 
@@ -230,11 +212,21 @@ async def main():
         print(f"ERROR: YAML file not found at:\n  {YAML_PATH}")
         sys.exit(1)
 
-    print(f"Starting {len(BENCHMARKS)} benchmarks in parallel...\n")
+    # Write all patched YAMLs directly to disk before starting
+    print("Preparing benchmark YAML files...")
+    yaml_filenames = {}
+    for name in BENCHMARKS:
+        patched = patch_yaml(yaml_template, name)
+        yaml_filename = f"tmp_{name}.yaml"
+        (YAML_INSTANCE_DIR / yaml_filename).write_text(patched, encoding="utf-8")
+        yaml_filenames[name] = yaml_filename
+        print(f"  Written: {yaml_filename}")
+
+    print(f"\nStarting {len(BENCHMARKS)} benchmarks in parallel...\n")
     start = datetime.now()
 
     tasks = [
-        run_benchmark(name, prompt, yaml_template, OUTPUT_DIR)
+        run_benchmark(name, prompt, yaml_filenames[name], OUTPUT_DIR)
         for name, prompt in BENCHMARKS.items()
     ]
     results = await asyncio.gather(*tasks)

@@ -1,9 +1,7 @@
 graph:
   id: ChatDev_benchmark_ablation
-  description: >
-    Ablation study — no Client Liaison or User Simulator.
-    CEO receives the initial prompt directly without any clarification phase.
-    Switch benchmarks by changing BENCHMARK_SPEC to one of:
+  description: |
+    Ablation study — no Client Liaison or User Simulator. CEO receives the initial prompt directly without any clarification phase. Switch benchmarks by changing BENCHMARK_SPEC to one of:
       - benchmark_task_api
       - benchmark_csv_pipeline
       - benchmark_chat_server
@@ -11,7 +9,6 @@ graph:
       - benchmark_expense_tracker
   log_level: DEBUG
   is_majority_voting: false
-
   nodes:
     - id: Chief Executive Officer
       type: agent
@@ -62,7 +59,6 @@ graph:
         thinking: null
         memories: []
         retry: null
-
     - id: Chief Technology Officer
       type: agent
       description: Defines architecture, tech stack, and file structure from CEO plan.
@@ -106,7 +102,6 @@ graph:
         thinking: null
         memories: []
         retry: null
-
     - id: Programmer
       type: agent
       description: Implements code per CTO specs with communicative dehallucination protocol.
@@ -161,7 +156,6 @@ graph:
         thinking: null
         memories: []
         retry: null
-
     - id: Code Reviewer
       type: agent
       description: Reviews implementation and answers Programmer clarifying questions with specific details.
@@ -216,7 +210,6 @@ graph:
         thinking: null
         memories: []
         retry: null
-
     - id: Tester
       type: agent
       description: Creates and runs tests; reports failures or completion.
@@ -273,13 +266,11 @@ graph:
         thinking: null
         memories: []
         retry: null
-
     - id: FINAL
       type: passthrough
       description: Terminal node when testing confirms completion.
       context_window: 0
       config: {}
-
     - id: Review Loop Counter
       type: loop_counter
       config:
@@ -289,17 +280,6 @@ graph:
       description: ''
       context_window: 0
       log_output: true
-
-    - id: Test Loop Counter
-      type: loop_counter
-      config:
-        max_iterations: 3
-        reset_on_emit: true
-        message: ''
-      description: ''
-      context_window: 0
-      log_output: true
-
   edges:
     - from: Chief Executive Officer
       to: Chief Technology Officer
@@ -307,21 +287,18 @@ graph:
       condition: 'true'
       carry_data: true
       keep_message: false
-
     - from: Chief Technology Officer
       to: Programmer
       trigger: true
       condition: 'true'
       carry_data: true
       keep_message: false
-
     - from: Programmer
       to: Code Reviewer
       trigger: true
       condition: 'true'
       carry_data: true
       keep_message: false
-
     - from: Code Reviewer
       to: Programmer
       trigger: true
@@ -335,7 +312,6 @@ graph:
           case_sensitive: true
       carry_data: true
       keep_message: false
-
     - from: Code Reviewer
       to: Review Loop Counter
       trigger: true
@@ -349,7 +325,6 @@ graph:
           case_sensitive: true
       carry_data: true
       keep_message: false
-
     - from: Review Loop Counter
       to: Tester
       trigger: true
@@ -359,7 +334,6 @@ graph:
           name: 'true'
       carry_data: true
       keep_message: false
-
     - from: Code Reviewer
       to: Tester
       trigger: true
@@ -373,7 +347,6 @@ graph:
           case_sensitive: true
       carry_data: true
       keep_message: false
-
     - from: Tester
       to: Programmer
       trigger: true
@@ -387,31 +360,6 @@ graph:
           case_sensitive: true
       carry_data: true
       keep_message: false
-
-    - from: Tester
-      to: Test Loop Counter
-      trigger: true
-      condition:
-        type: keyword
-        config:
-          any: []
-          none:
-            - <INFO> Finished
-          regex: []
-          case_sensitive: true
-      carry_data: true
-      keep_message: false
-
-    - from: Test Loop Counter
-      to: FINAL
-      trigger: true
-      condition:
-        type: function
-        config:
-          name: 'true'
-      carry_data: true
-      keep_message: false
-
     - from: Tester
       to: FINAL
       trigger: true
@@ -425,25 +373,18 @@ graph:
           case_sensitive: true
       carry_data: true
       keep_message: false
-
   memory: []
   initial_instruction: ''
   start:
     - Chief Executive Officer
   end:
     - FINAL
-
 vars:
-  COMMON_PROMPT: >
-    ChatDev is a software company powered by multiple intelligent agents, such as chief executive
-    officer, chief human resources officer, chief product officer, chief technology officer, etc,
-    with a multi-agent organizational structure and the mission of "changing the digital world
-    through programming".
-
+  COMMON_PROMPT: |
+    ChatDev is a software company powered by multiple intelligent agents, such as chief executive officer, chief human resources officer, chief product officer, chief technology officer, etc, with a multi-agent organizational structure and the mission of "changing the digital world through programming".
   BENCHMARK_SPEC: ${benchmark_task_api}
-
-  benchmark_task_api: "Task Management REST API"
-  benchmark_csv_pipeline: "CSV Processing Pipeline"
-  benchmark_chat_server: "Real-Time Chat Server"
-  benchmark_url_shortener: "URL Shortener Service"
-  benchmark_expense_tracker: "Expense Tracker CLI"
+  benchmark_task_api: Task Management REST API
+  benchmark_csv_pipeline: CSV Processing Pipeline
+  benchmark_chat_server: Real-Time Chat Server
+  benchmark_url_shortener: URL Shortener Service
+  benchmark_expense_tracker: Expense Tracker CLI

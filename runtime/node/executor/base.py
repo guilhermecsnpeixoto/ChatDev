@@ -111,14 +111,19 @@ class NodeExecutor(ABC):
     def _inputs_to_text(self, inputs: List[Message]) -> str:
         if not inputs:
             return ""
-        parts: list[str] = []
+        grouped: dict[str, list[tuple[str, str]]] = {}
         for message in inputs:
             source = message.metadata.get("source", "UNKNOWN")
             content = message.text_content()
             content = re.sub(r"(?m)^=== INPUT FROM [^\n]+ ===\n{0,2}", "", content).strip()
-            parts.append(
-                f"=== INPUT FROM {source} ({message.role.value}) ===\n\n{content}"
-            )
+            grouped.setdefault(source, []).append((message.role.value, content))
+
+        parts: list[str] = []
+        for source, entries in grouped.items():
+            role = entries[0][0] if entries else "assistant"
+            text_parts = [text for _, text in entries if text]
+            merged_text = "\n\n".join(text_parts).strip()
+            parts.append(f"=== INPUT FROM {source} ({role}) ===\n\n{merged_text}")
         return "\n\n".join(parts)
 
     def _inputs_to_message_json(self, inputs: List[Message]) -> str | None:

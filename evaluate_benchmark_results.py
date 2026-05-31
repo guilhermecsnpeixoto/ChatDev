@@ -1,13 +1,9 @@
-"""Post-hoc benchmark evaluator for generated ChatDev projects.
+#!/usr/bin/env python3
+"""Post‑hoc benchmark evaluator with execution log analysis.
 
-The script accepts either a benchmark session archive or a directory that
-contains one or more session archives. It extracts each archive, locates the
-generated project root, executes a small set of auto-checks, and prints a score
-per benchmark.
-
-The checks are intentionally conservative: static greps, file existence checks,
-and optional command execution such as ``pytest``. The implementation is
-designed to be extended with more benchmark-specific commands later if needed.
+Accepts a directory containing benchmark archives (or a single archive),
+extracts each session, runs static checks (file existence, grep, pytest),
+and analyzes execution_logs.json to extract thread behaviour metrics.
 """
 
 from __future__ import annotations
@@ -21,15 +17,19 @@ import sys
 import tempfile
 import zipfile
 from dataclasses import dataclass
+from datetime import datetime
 from fnmatch import fnmatch
 from importlib import import_module
 from pathlib import Path
 from pathlib import PurePosixPath
 from time import perf_counter
-from typing import Iterable, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from utils.env_loader import load_dotenv_file
 
+# ----------------------------------------------------------------------
+# 1. Benchmark static checks (original code)
+# ----------------------------------------------------------------------
 
 BENCHMARK_NAMES = [
     "benchmark_task_api",
@@ -74,6 +74,9 @@ class CheckSpec:
 
 
 def _benchmark_checks() -> dict[str, list[CheckSpec]]:
+    # Placeholder detection pattern (must_absent=True)
+    placeholder_pattern = r"^[ \t]*pass[ \t]*$|raise\s+NotImplementedError|#\s*(TODO|FIXME|stub|placeholder)"
+
     return {
         "benchmark_task_api": [
             CheckSpec("AC1", "Project contains a Dockerfile", "file_exists", paths=("Dockerfile",)),
@@ -84,6 +87,7 @@ def _benchmark_checks() -> dict[str, list[CheckSpec]]:
             CheckSpec("AC6", "Pagination keywords appear in routes", "grep", pattern=r"skip|limit|page", paths=("**/routes/**", "**/*route*.*", "**/*router*.*")),
             CheckSpec("AC7", "User isolation keywords appear in the code", "grep", pattern=r"user_id|owner_id"),
             CheckSpec("AC8", "Pytest suite is runnable", "command", command=(sys.executable, "-m", "pytest", "-q"), timeout_seconds=600),
+            CheckSpec("NO_STUBS", "No placeholder/stub code", "grep", pattern=placeholder_pattern, must_absent=True, paths=("**/*.py",)),
         ],
         "benchmark_csv_pipeline": [
             CheckSpec("AC1", "Pipeline source exists", "grep", pattern=r"csv|pandas|argparse"),
@@ -93,6 +97,7 @@ def _benchmark_checks() -> dict[str, list[CheckSpec]]:
             CheckSpec("AC5", "Parallel execution is present", "grep", pattern=r"ProcessPoolExecutor|ThreadPoolExecutor|Pool"),
             CheckSpec("AC6", "CLI support is present", "grep", pattern=r"argparse|click|typer"),
             CheckSpec("AC7", "Logging is present", "grep", pattern=r"logging\.|logger\."),
+            CheckSpec("NO_STUBS", "No placeholder/stub code", "grep", pattern=placeholder_pattern, must_absent=True, paths=("**/*.py",)),
         ],
         "benchmark_chat_server": [
             CheckSpec("AC1", "Project contains a Dockerfile", "file_exists", paths=("Dockerfile",)),
@@ -103,6 +108,7 @@ def _benchmark_checks() -> dict[str, list[CheckSpec]]:
             CheckSpec("AC6", "Authentication keywords appear near the WS flow", "grep", pattern=r"token|authenticate|jwt|login"),
             CheckSpec("AC7", "Async code appears in the code", "grep", pattern=r"async\s+def|await|asyncio"),
             CheckSpec("AC8", "Pytest suite is runnable", "command", command=(sys.executable, "-m", "pytest", "-q"), timeout_seconds=600),
+            CheckSpec("NO_STUBS", "No placeholder/stub code", "grep", pattern=placeholder_pattern, must_absent=True, paths=("**/*.py",)),
         ],
         "benchmark_url_shortener": [
             CheckSpec("AC1", "Docker Compose file exists", "file_exists", paths=("docker-compose.yml", "compose.yml")),
@@ -114,6 +120,7 @@ def _benchmark_checks() -> dict[str, list[CheckSpec]]:
             CheckSpec("AC7", "Rate limiting keywords appear in the code", "grep", pattern=r"rate.?limit|429|ttl"),
             CheckSpec("AC8", "PostgreSQL usage appears in the code", "grep", pattern=r"postgresql|psycopg|postgres"),
             CheckSpec("AC9", "Redis usage appears in the code", "grep", pattern=r"redis|Redis"),
+            CheckSpec("NO_STUBS", "No placeholder/stub code", "grep", pattern=placeholder_pattern, must_absent=True, paths=("**/*.py",)),
         ],
         "benchmark_expense_tracker": [
             CheckSpec("AC1", "CLI support is present", "grep", pattern=r"argparse|click|typer"),
@@ -124,16 +131,12 @@ def _benchmark_checks() -> dict[str, list[CheckSpec]]:
             CheckSpec("AC6", "CSV export keywords appear in the code", "grep", pattern=r"csv|export"),
             CheckSpec("AC7", "SQLite usage appears in the code", "grep", pattern=r"sqlite"),
             CheckSpec("AC8", "Pytest suite is runnable", "command", command=(sys.executable, "-m", "pytest", "-q"), timeout_seconds=600),
+            CheckSpec("NO_STUBS", "No placeholder/stub code", "grep", pattern=placeholder_pattern, must_absent=True, paths=("**/*.py",)),
         ],
     }
 
 
 def _load_hidden_spec_text(benchmark_name: str) -> str | None:
-    """Load the hidden spec text for a given benchmark from the bundled YAML.
-
-    Returns the spec text (lowercased) or None when not available.
-    This uses a best-effort extraction so the script doesn't require PyYAML.
-    """
     yaml_path = Path("yaml_instance/ChatDev_simple_benchmarks_v1.yaml")
     if not yaml_path.exists():
         return None
@@ -141,32 +144,20 @@ def _load_hidden_spec_text(benchmark_name: str) -> str | None:
         text = yaml_path.read_text(encoding="utf-8")
     except Exception:
         return None
-
-    # Find the block that starts with "benchmark_name: |-" and capture the indented block
     pattern = re.compile(rf"^{re.escape(benchmark_name)}:\s*\|-\n((?:\s{{4}}.*\n)+)", re.MULTILINE)
     m = pattern.search(text)
     if not m:
         return None
     block = m.group(1)
-    # Remove common 4-space indentation
     cleaned = "\n".join(line[4:] if line.startswith("    ") else line for line in block.splitlines())
     return cleaned.strip().lower()
 
 
 def _should_skip_check_by_hidden_spec(benchmark_name: str, check: CheckSpec, hidden_spec_text: str | None) -> bool:
-    """Return True if the given check should be skipped based on the hidden spec.
-
-    We use a small heuristic map: if the hidden spec does not mention keywords
-    required by a check, we consider the check inapplicable and skip it.
-    """
     if not hidden_spec_text:
         return False
-
-    # Map of benchmark -> check_id -> list of keywords that must appear in hidden spec
     conditional_requirements: dict[str, dict[str, list[str]]] = {
-        "benchmark_chat_server": {
-            "AC3": ["persist", "database", "sqlite", "store", "history"],
-        },
+        "benchmark_chat_server": {"AC3": ["persist", "database", "sqlite", "store", "history"]},
         "benchmark_csv_pipeline": {
             "AC5": ["parallel", "parallel processing", "processpoolexecutor", "threadpoolexecutor"],
             "AC3": ["stream", "streaming", "chunksize", "chunk"],
@@ -176,30 +167,90 @@ def _should_skip_check_by_hidden_spec(benchmark_name: str, check: CheckSpec, hid
             "AC5": ["soft delete", "is_deleted", "deleted_at"],
             "AC6": ["pagination", "skip", "limit", "page"],
         },
-        "benchmark_url_shortener": {
-            "AC8": ["postgres", "postgresql", "psycopg"],
-        },
-        "benchmark_expense_tracker": {
-            "AC8": ["pytest", "test suite", "tests"],
-        },
+        "benchmark_url_shortener": {"AC8": ["postgres", "postgresql", "psycopg"]},
+        "benchmark_expense_tracker": {"AC8": ["pytest", "test suite", "tests"]},
     }
-
     bm_map = conditional_requirements.get(benchmark_name)
     if not bm_map:
         return False
-
     reqs = bm_map.get(check.check_id)
     if not reqs:
         return False
-
-    # If any of the required keywords is present, the check is applicable.
     for kw in reqs:
         if kw.lower() in hidden_spec_text:
             return False
-
-    # No keyword matched -> skip the check
     return True
 
+
+# ----------------------------------------------------------------------
+# 2. Execution log analysis (thread behaviour metrics)
+# ----------------------------------------------------------------------
+
+def to_seconds(timestamp: str) -> float:
+    """Convert ISO timestamp to float seconds since epoch."""
+    dt = datetime.fromisoformat(timestamp)
+    return dt.timestamp()
+
+
+def parse_execution_logs(log_path: Path) -> List[Dict[str, Any]]:
+    with open(log_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data.get("logs", [])
+
+
+def analyze_logs(logs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    error_count = 0
+    warning_count = 0
+    tool_calls = 0
+    tool_failures = 0
+    cycle_iterations: Dict[str, int] = {}
+    task_finished = False
+
+    for entry in logs:
+        level = entry.get("level")
+        if level == "ERROR":
+            error_count += 1
+        elif level == "WARNING":
+            warning_count += 1
+
+        event = entry.get("event_type")
+        details = entry.get("details", {})
+
+        if event == "TOOL_CALL":
+            tool_calls += 1
+            if details.get("success") is False:
+                tool_failures += 1
+
+        msg = entry.get("message", "")
+        if "Cycle" in msg and "iteration" in msg:
+            m = re.search(r"Cycle (cycle_\d+).* iteration (\d+)", msg)
+            if m:
+                cycle_name = m.group(1)
+                iteration = int(m.group(2))
+                cycle_iterations[cycle_name] = max(cycle_iterations.get(cycle_name, 0), iteration)
+
+        if not task_finished and "<INFO> Finished" in msg:
+            task_finished = True
+
+    return {
+        "task_finished": task_finished,
+        "error_count": error_count,
+        "warning_count": warning_count,
+        "tool_call_count": tool_calls,
+        "tool_failure_rate": tool_failures / tool_calls if tool_calls else 0.0,
+        "cycle_iterations": cycle_iterations,
+    }
+
+
+def find_execution_log(root: Path) -> Optional[Path]:
+    for candidate in root.rglob("execution_logs.json"):
+        return candidate
+    return None
+
+
+# ----------------------------------------------------------------------
+# 3. Benchmark evaluation (with integrated log analysis)
+# ----------------------------------------------------------------------
 
 def _resolve_opik_project_name() -> str:
     return os.getenv("OPIK_PROJECT_NAME", "ChatDev")
@@ -214,8 +265,6 @@ def _resolve_opik_host() -> str:
 
 
 def _build_opik_client() -> object | None:
-    # Load .env using the shared helper, then fall back to scanning parent
-    # directories for a .env file in case the process cwd is different.
     load_dotenv_file()
     def _load_env_from_ancestors(filename: str = ".env") -> Path | None:
         p = Path.cwd()
@@ -241,7 +290,6 @@ def _build_opik_client() -> object | None:
             if p.parent == p:
                 break
             p = p.parent
-        # Try script directory as a last resort
         script_dir = Path(__file__).parent
         candidate = script_dir / filename
         if candidate.exists():
@@ -258,23 +306,14 @@ def _build_opik_client() -> object | None:
                 pass
             return candidate
         return None
-
     _load_env_from_ancestors()
-
     if opik is None:
-        # If an API key exists but the 'opik' package is missing, provide a clearer message.
         if os.getenv("OPIK_API_KEY"):
-            print(
-                "OPIK_API_KEY found but the Python package 'opik' is not installed;"
-                " set up the package to enable logging.",
-                file=sys.stderr,
-            )
+            print("OPIK_API_KEY found but the Python package 'opik' is not installed; set up the package to enable logging.", file=sys.stderr)
         return None
-
     api_key = os.getenv("OPIK_API_KEY")
     if not api_key:
         return None
-
     try:
         return opik.Opik(
             project_name=_resolve_opik_project_name(),
@@ -302,17 +341,7 @@ def _matches_any(rel_path: str, patterns: Sequence[str]) -> bool:
 
 
 def _should_skip_archive_member(member_path: PurePosixPath) -> bool:
-    skip_parts = {
-        ".git",
-        ".venv",
-        "venv",
-        "node_modules",
-        "__pycache__",
-        ".pytest_cache",
-        ".mypy_cache",
-        "dist",
-        "build",
-    }
+    skip_parts = {".git", ".venv", "venv", "node_modules", "__pycache__", ".pytest_cache", ".mypy_cache", "dist", "build"}
     return any(part in skip_parts for part in member_path.parts)
 
 
@@ -357,7 +386,6 @@ def _run_command(command: Sequence[str], cwd: Path, timeout_seconds: int) -> tup
         return False, f"command not available: {exc}"
     except subprocess.TimeoutExpired:
         return False, f"timed out after {timeout_seconds}s"
-
     details = (completed.stdout or "") + (completed.stderr or "")
     details = details.strip()
     if completed.returncode == 0:
@@ -369,7 +397,6 @@ def _evaluate_check(root: Path, spec: CheckSpec) -> CheckResult:
     started = perf_counter()
     passed = False
     details = ""
-
     if spec.kind == "file_exists":
         passed, details = _check_file_exists(root, spec.paths)
     elif spec.kind == "grep":
@@ -386,7 +413,6 @@ def _evaluate_check(root: Path, spec: CheckSpec) -> CheckResult:
         passed, details = _run_command(spec.command, command_root, spec.timeout_seconds)
     else:
         raise ValueError(f"unsupported check kind: {spec.kind}")
-
     duration = perf_counter() - started
     return CheckResult(
         check_id=spec.check_id,
@@ -409,69 +435,11 @@ def _thread_id_from_target(target: Path) -> str | None:
     for benchmark_name in sorted(BENCHMARK_NAMES, key=len, reverse=True):
         prefix = f"{benchmark_name}_"
         if name.startswith(prefix):
-            thread_id = name[len(prefix) :]
+            thread_id = name[len(prefix):]
             return thread_id or None
         if name == benchmark_name:
             return None
     return None
-
-
-def _log_result_to_opik(result: dict, client: object | None) -> bool:
-    if client is None:
-        return False
-
-    thread_id = result.get("thread_id")
-    if not thread_id:
-        return False
-
-    rating = _score_to_rating(float(result.get("score", 0.0)))
-    reason = (
-        f"auto-check score={result.get('score', 0.0):.2f}/100; "
-        f"passed={result.get('passed_checks', 0)}/{result.get('total_checks', 0)}; "
-        f"rating={rating}/10"
-    )
-    payload = [
-        {
-            "id": thread_id,
-            "name": OPIK_SCORE_NAME,
-            "value": rating,
-            "reason": reason,
-        }
-    ]
-
-    try:
-        client.log_threads_feedback_scores(
-            scores=payload,
-            project_name=_resolve_opik_project_name(),
-        )
-        return True
-    except Exception as exc:
-        print(f"Opik logging failed for thread {thread_id}: {exc}", file=sys.stderr)
-        return False
-
-
-def _locate_project_root(extracted_root: Path) -> Path:
-    code_workspaces = [path for path in extracted_root.rglob("code_workspace") if path.is_dir()]
-    if code_workspaces:
-        return code_workspaces[0]
-
-    candidate_files = [
-        "Dockerfile",
-        "pyproject.toml",
-        "package.json",
-        "requirements.txt",
-        "compose.yml",
-        "docker-compose.yml",
-    ]
-    for candidate in candidate_files:
-        if (extracted_root / candidate).exists():
-            return extracted_root
-
-    subdirs = [path for path in extracted_root.iterdir() if path.is_dir()]
-    if len(subdirs) == 1:
-        return subdirs[0]
-
-    return extracted_root
 
 
 def _extract_archive(archive: Path, temp_root: Path) -> Path:
@@ -485,16 +453,28 @@ def _extract_archive(archive: Path, temp_root: Path) -> Path:
                 raise ValueError(f"Unsafe archive path: {member.filename}")
             if _should_skip_archive_member(member_path):
                 continue
-
             destination = target.joinpath(*member_path.parts)
             if member.is_dir():
                 destination.mkdir(parents=True, exist_ok=True)
                 continue
-
             destination.parent.mkdir(parents=True, exist_ok=True)
             with zip_file.open(member) as source, destination.open("wb") as destination_file:
                 destination_file.write(source.read())
     return target
+
+
+def _locate_project_root(extracted_root: Path) -> Path:
+    code_workspaces = [path for path in extracted_root.rglob("code_workspace") if path.is_dir()]
+    if code_workspaces:
+        return code_workspaces[0]
+    candidate_files = ["Dockerfile", "pyproject.toml", "package.json", "requirements.txt", "compose.yml", "docker-compose.yml"]
+    for candidate in candidate_files:
+        if (extracted_root / candidate).exists():
+            return extracted_root
+    subdirs = [path for path in extracted_root.iterdir() if path.is_dir()]
+    if len(subdirs) == 1:
+        return subdirs[0]
+    return extracted_root
 
 
 def _benchmark_name_from_path(path: Path) -> str | None:
@@ -508,18 +488,9 @@ def _benchmark_name_from_path(path: Path) -> str | None:
 def _collect_targets(input_path: Path, benchmark: str | None) -> list[Path]:
     if input_path.is_file():
         return [input_path]
-
     if input_path.is_dir():
         archives = sorted(input_path.glob("*.zip"))
-        project_markers = [
-            "Dockerfile",
-            "pyproject.toml",
-            "package.json",
-            "requirements.txt",
-            "compose.yml",
-            "docker-compose.yml",
-            "code_workspace",
-        ]
+        project_markers = ["Dockerfile", "pyproject.toml", "package.json", "requirements.txt", "compose.yml", "docker-compose.yml", "code_workspace"]
         looks_like_project = any((input_path / marker).exists() for marker in project_markers)
         if looks_like_project and benchmark:
             return [input_path]
@@ -529,11 +500,42 @@ def _collect_targets(input_path: Path, benchmark: str | None) -> list[Path]:
         if looks_like_project and not archives:
             return [input_path]
         return archives
-
     raise FileNotFoundError(f"input path not found: {input_path}")
 
 
+def _log_result_to_opik(result: dict, client: object | None) -> bool:
+    if client is None:
+        return False
+    thread_id = result.get("thread_id")
+    if not thread_id:
+        return False
+
+    rating = _score_to_rating(float(result.get("score", 0.0)))
+    reason = f"auto-check score={result.get('score', 0.0):.2f}/100; passed={result.get('passed_checks', 0)}/{result.get('total_checks', 0)}; rating={rating}/10"
+    scores = [{"id": thread_id, "name": OPIK_SCORE_NAME, "value": rating, "reason": reason}]
+
+    metrics = result.get("thread_metrics", {})
+    if metrics:
+        # Only log metrics that actually exist in the returned dict
+        existing_keys = ["task_finished", "error_count", "warning_count", "tool_call_count", "tool_failure_rate"]
+        for key in existing_keys:
+            if key in metrics:
+                val = metrics[key]
+                if isinstance(val, (int, float, bool)):
+                    scores.append({"id": thread_id, "name": f"thread_{key}", "value": float(val), "reason": "execution log analysis"})
+        for cycle, iters in metrics.get("cycle_iterations", {}).items():
+            scores.append({"id": thread_id, "name": f"thread_{cycle}_iterations", "value": float(iters), "reason": "execution log analysis"})
+
+    try:
+        client.log_threads_feedback_scores(scores=scores, project_name=_resolve_opik_project_name())
+        return True
+    except Exception as exc:
+        print(f"Opik logging failed for thread {thread_id}: {exc}", file=sys.stderr)
+        return False
+
+
 def evaluate_target(target: Path, benchmark: str | None = None) -> dict:
+    """Evaluate a single target (zip or directory) and return combined results."""
     benchmark_name = benchmark or _benchmark_name_from_path(target)
     if benchmark_name is None:
         raise ValueError(f"Could not infer benchmark name from {target}")
@@ -542,7 +544,7 @@ def evaluate_target(target: Path, benchmark: str | None = None) -> dict:
     if specs is None:
         raise ValueError(f"No checks registered for {benchmark_name}")
 
-    with tempfile.TemporaryDirectory(prefix="chatdev-benchmark-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="chatdev-benchmark-", ignore_cleanup_errors=True) as temp_dir:
         temp_root = Path(temp_dir)
         if target.is_file() and target.suffix.lower() == ".zip":
             extracted_root = _extract_archive(target, temp_root)
@@ -550,32 +552,34 @@ def evaluate_target(target: Path, benchmark: str | None = None) -> dict:
             extracted_root = target
 
         project_root = _locate_project_root(extracted_root)
-        # Load the hidden spec for this benchmark (if available) and skip checks
-        # that are clearly inapplicable according to the hidden specification.
+
+        # ---- Static checks ----
         hidden_spec_text = _load_hidden_spec_text(benchmark_name)
         results: list[CheckResult] = []
         for spec in specs:
             if _should_skip_check_by_hidden_spec(benchmark_name, spec, hidden_spec_text):
-                # mark skipped checks with zero weight so they don't affect totals
-                results.append(
-                    CheckResult(
-                        check_id=spec.check_id,
-                        description=spec.description,
-                        kind=spec.kind,
-                        passed=True,
-                        details="skipped per hidden spec",
-                        weight=0.0,
-                        duration_seconds=0.0,
-                    )
-                )
+                results.append(CheckResult(check_id=spec.check_id, description=spec.description, kind=spec.kind,
+                                           passed=True, details="skipped per hidden spec", weight=0.0, duration_seconds=0.0))
             else:
                 results.append(_evaluate_check(project_root, spec))
 
-        total_weight = sum(result.weight for result in results)
-        passed_weight = sum(result.weight for result in results if result.passed)
+        total_weight = sum(r.weight for r in results)
+        passed_weight = sum(r.weight for r in results if r.passed)
         score = 100.0 * passed_weight / total_weight if total_weight else 0.0
         thread_id = _thread_id_from_target(target)
         rating = _score_to_rating(score)
+
+        # ---- Execution log analysis ----
+        thread_metrics = {}
+        log_file = find_execution_log(extracted_root)
+        if log_file:
+            try:
+                logs = parse_execution_logs(log_file)
+                thread_metrics = analyze_logs(logs)
+            except Exception as e:
+                print(f"Warning: failed to analyze execution logs for {target}: {e}", file=sys.stderr)
+        else:
+            print(f"Info: no execution_logs.json found for {target}", file=sys.stderr)
 
         return {
             "benchmark": benchmark_name,
@@ -584,9 +588,10 @@ def evaluate_target(target: Path, benchmark: str | None = None) -> dict:
             "score": round(score, 2),
             "rating": rating,
             "thread_id": thread_id,
-            "passed_checks": sum(1 for result in results if result.passed),
+            "passed_checks": sum(1 for r in results if r.passed),
             "total_checks": len(results),
-            "checks": [result.__dict__ for result in results],
+            "checks": [r.__dict__ for r in results],
+            "thread_metrics": thread_metrics,
         }
 
 
@@ -598,10 +603,7 @@ def evaluate_and_log_target(target: Path, benchmark: str | None = None, opik_cli
 
 
 def _print_report(result: dict) -> None:
-    print(
-        f"[{result['benchmark']}] score: {result['score']:.2f} "
-        f"rating: {result['rating']}/10 ({result['passed_checks']}/{result['total_checks']})"
-    )
+    print(f"[{result['benchmark']}] score: {result['score']:.2f} rating: {result['rating']}/10 ({result['passed_checks']}/{result['total_checks']})")
     print(f"  target: {result['target']}")
     print(f"  root:   {result['project_root']}")
     if result.get("thread_id"):
@@ -609,23 +611,18 @@ def _print_report(result: dict) -> None:
     for check in result["checks"]:
         status = "PASS" if check["passed"] else "FAIL"
         print(f"  - {status} {check['check_id']}: {check['description']} ({check['details']})")
+    tm = result.get("thread_metrics", {})
+    if tm:
+        print(f"  Thread metrics: finished={tm.get('task_finished')}, errors={tm.get('error_count')}, "
+              f"warnings={tm.get('warning_count')}, tool_calls={tm.get('tool_call_count')}, "
+              f"tool_failure_rate={tm.get('tool_failure_rate', 0):.2f}, cycles={tm.get('cycle_iterations', {})}")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Evaluate ChatDev benchmark outputs with auto-checks")
-    parser.add_argument(
-        "path",
-        help="A benchmark .zip archive or a directory containing benchmark archives",
-    )
-    parser.add_argument(
-        "--benchmark",
-        choices=BENCHMARK_NAMES,
-        help="Evaluate only the specified benchmark when the input is a directory",
-    )
-    parser.add_argument(
-        "--json-output",
-        help="Optional path to write a JSON summary",
-    )
+    parser = argparse.ArgumentParser(description="Evaluate ChatDev benchmark outputs with auto‑checks and thread log analysis")
+    parser.add_argument("path", help="A benchmark .zip archive or a directory containing benchmark archives")
+    parser.add_argument("--benchmark", choices=BENCHMARK_NAMES, help="Evaluate only the specified benchmark when the input is a directory")
+    parser.add_argument("--json-output", help="Optional path to write a JSON summary")
     args = parser.parse_args()
 
     input_path = Path(args.path).expanduser().resolve()
@@ -635,7 +632,7 @@ def main() -> int:
         return 1
 
     opik_client = _build_opik_client()
-    results = [evaluate_and_log_target(target, benchmark=args.benchmark, opik_client=opik_client) for target in targets]
+    results = [evaluate_and_log_target(t, benchmark=args.benchmark, opik_client=opik_client) for t in targets]
     summary = {"results": results}
 
     for result in results:
@@ -648,7 +645,7 @@ def main() -> int:
         print(f"\nWrote JSON summary to {output_path}")
 
     if opik_client is not None:
-        logged_count = sum(1 for result in results if result.get("opik_logged"))
+        logged_count = sum(1 for r in results if r.get("opik_logged"))
         print(f"\nOpik logging attempted for {logged_count}/{len(results)} result(s)")
     else:
         print("\nOpik logging skipped: set OPIK_API_KEY to enable thread feedback upload.")

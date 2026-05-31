@@ -25,11 +25,8 @@ from datetime import datetime
 # ── Config ────────────────────────────────────────────────────────────────────
 BASE_URL = "http://localhost:6400"
 WS_URL = "ws://localhost:6400/ws"
-YAML_PATH = (
-    r"C:\Users\Daniel Fernandes\OneDrive - Universidade do Algarve"
-    r"\Ambiente de Trabalho\Universidade\AASMA\Projeto\ChatDev"
-    r"\yaml_instance\ChatDev_simple_benchmarks_v1.yaml"
-)
+SCRIPT_DIR = Path(__file__).resolve().parent
+YAML_PATH = SCRIPT_DIR / "yaml_instance" / "ChatDev_simple_benchmarks_v1.yaml"
 YAML_INSTANCE_DIR = Path(YAML_PATH).parent
 OUTPUT_DIR = Path("benchmark_results")
 POLL_INTERVAL = 15

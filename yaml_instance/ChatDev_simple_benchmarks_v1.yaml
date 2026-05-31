@@ -285,14 +285,7 @@ graph:
         name: google/gemini-3.1-flash-lite-preview
         provider: openrouter
         role: |-
-          ${COMMON_PROMPT}
-          Tool call safety:
-          - Use only the exact tools listed in your tooling configuration.
-          - Do not invent tool names, arguments, parameters, or nested JSON fields.
-          - First call `describe_available_files` exactly once.
-          - Then call `read_file_segment` only for files you need to inspect, using minimal valid arguments.
-          - If any tool call fails, stop using tools, explain the tool failure briefly, and end with "<INFO> Problem Found".
-
+          Tooling guidance: Minimize external tool calls—batch `describe_available_files` and `read_file_segment`, read only required files, cache results, and avoid repeated runs unless necessary.
           Language constraint: All development, examples, and implementation details must be provided in Python.
           You are the Code Reviewer.
           You are part of a collaborative team where each member has a specific role.

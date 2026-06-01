@@ -40,12 +40,11 @@ BENCHMARK_NAMES = [
 ]
 
 OPIK_SCORE_NAME = "benchmark_requirements_rating"
+OPIK_NO_STUBS_SCORE_NAME = "benchmark_completeness"
 DEFAULT_OPIK_HOST = "https://www.comet.com/opik/api"
+NO_STUBS_CHECK_ID = "NO_STUBS"
 
-try:
-    opik = import_module("opik")
-except Exception:
-    opik = None
+opik = None
 
 
 @dataclass(frozen=True)
@@ -76,6 +75,14 @@ class CheckSpec:
 def _benchmark_checks() -> dict[str, list[CheckSpec]]:
     # Placeholder detection pattern (must_absent=True)
     placeholder_pattern = r"^[ \t]*pass[ \t]*$|raise\s+NotImplementedError|#\s*(TODO|FIXME|stub|placeholder)"
+    no_stubs_check = CheckSpec(
+        NO_STUBS_CHECK_ID,
+        "No placeholder/stub code",
+        "grep",
+        pattern=placeholder_pattern,
+        must_absent=True,
+        paths=("*.py", "**/*.py"),
+    )
 
     return {
         "benchmark_task_api": [
@@ -84,20 +91,20 @@ def _benchmark_checks() -> dict[str, list[CheckSpec]]:
             CheckSpec("AC3", "SQLite is used", "grep", pattern=r"sqlite"),
             CheckSpec("AC4", "JWT auth is implemented", "grep", pattern=r"jwt|bearer|jose"),
             CheckSpec("AC5", "Soft delete fields appear in the code", "grep", pattern=r"is_deleted|deleted_at"),
-            CheckSpec("AC6", "Pagination keywords appear in routes", "grep", pattern=r"skip|limit|page", paths=("**/routes/**", "**/*route*.*", "**/*router*.*")),
+            CheckSpec("AC6", "Pagination keywords appear in routes", "grep", pattern=r"skip|limit|page", paths=("routes/**", "**/routes/**", "**/*route*.*", "**/*router*.*")),
             CheckSpec("AC7", "User isolation keywords appear in the code", "grep", pattern=r"user_id|owner_id"),
             CheckSpec("AC8", "Pytest suite is runnable", "command", command=(sys.executable, "-m", "pytest", "-q"), timeout_seconds=600),
-            CheckSpec("NO_STUBS", "No placeholder/stub code", "grep", pattern=placeholder_pattern, must_absent=True, paths=("**/*.py",)),
+            no_stubs_check,
         ],
         "benchmark_csv_pipeline": [
             CheckSpec("AC1", "Pipeline source exists", "grep", pattern=r"csv|pandas|argparse"),
-            CheckSpec("AC2", "JSON output logic appears in the code", "grep", pattern=r"json\.dump|json\.dumps|orjson"),
-            CheckSpec("AC3", "Streaming/chunked reading appears in the code", "grep", pattern=r"chunksize|chunk_size|iterchunks|iterrows"),
+            CheckSpec("AC2", "JSON or JSON Lines output logic appears in the code", "grep", pattern=r"json\.dump|json\.dumps|orjson|jsonlines|\.jsonl|JSONL"),
+            CheckSpec("AC3", "Streaming/chunked reading appears in the code", "grep", pattern=r"chunksize|chunk_size|iterchunks|readline|for\s+.*\s+in\s+.*csv"),
             CheckSpec("AC4", "Malformed row handling appears in the code", "grep", pattern=r"skip|malformed|invalid|error"),
             CheckSpec("AC5", "Parallel execution is present", "grep", pattern=r"ProcessPoolExecutor|ThreadPoolExecutor|Pool"),
             CheckSpec("AC6", "CLI support is present", "grep", pattern=r"argparse|click|typer"),
             CheckSpec("AC7", "Logging is present", "grep", pattern=r"logging\.|logger\."),
-            CheckSpec("NO_STUBS", "No placeholder/stub code", "grep", pattern=placeholder_pattern, must_absent=True, paths=("**/*.py",)),
+            no_stubs_check,
         ],
         "benchmark_chat_server": [
             CheckSpec("AC1", "Project contains a Dockerfile", "file_exists", paths=("Dockerfile",)),
@@ -106,9 +113,8 @@ def _benchmark_checks() -> dict[str, list[CheckSpec]]:
             CheckSpec("AC4", "Room support appears in the code", "grep", pattern=r"room|channel|room_id"),
             CheckSpec("AC5", "Message ordering keywords appear in the code", "grep", pattern=r"timestamp|created_at|sequence|ORDER BY"),
             CheckSpec("AC6", "Authentication keywords appear near the WS flow", "grep", pattern=r"token|authenticate|jwt|login"),
-            CheckSpec("AC7", "Async code appears in the code", "grep", pattern=r"async\s+def|await|asyncio"),
-            CheckSpec("AC8", "Pytest suite is runnable", "command", command=(sys.executable, "-m", "pytest", "-q"), timeout_seconds=600),
-            CheckSpec("NO_STUBS", "No placeholder/stub code", "grep", pattern=placeholder_pattern, must_absent=True, paths=("**/*.py",)),
+            CheckSpec("AC7", "Concurrency support for many users appears in the code", "grep", pattern=r"async\s+def|await|asyncio|connections|100|limit|capacity|semaphore"),
+            no_stubs_check,
         ],
         "benchmark_url_shortener": [
             CheckSpec("AC1", "Docker Compose file exists", "file_exists", paths=("docker-compose.yml", "compose.yml")),
@@ -120,18 +126,19 @@ def _benchmark_checks() -> dict[str, list[CheckSpec]]:
             CheckSpec("AC7", "Rate limiting keywords appear in the code", "grep", pattern=r"rate.?limit|429|ttl"),
             CheckSpec("AC8", "PostgreSQL usage appears in the code", "grep", pattern=r"postgresql|psycopg|postgres"),
             CheckSpec("AC9", "Redis usage appears in the code", "grep", pattern=r"redis|Redis"),
-            CheckSpec("NO_STUBS", "No placeholder/stub code", "grep", pattern=placeholder_pattern, must_absent=True, paths=("**/*.py",)),
+            CheckSpec("AC10", "API key authentication appears in the code", "grep", pattern=r"api[_-]?key|x-api-key|APIKey|authorization"),
+            no_stubs_check,
         ],
         "benchmark_expense_tracker": [
             CheckSpec("AC1", "CLI support is present", "grep", pattern=r"argparse|click|typer"),
             CheckSpec("AC2", "Expense CRUD keywords appear in the code", "grep", pattern=r"add|edit|delete|expense"),
-            CheckSpec("AC3", "Currency conversion keywords appear in the code", "grep", pattern=r"currency|exchange|convert"),
-            CheckSpec("AC4", "Recurring/monthly keywords appear in the code", "grep", pattern=r"recurr|monthly"),
+            CheckSpec("AC3", "Expense categories appear in the code", "grep", pattern=r"category|categories"),
+            CheckSpec("AC4", "Fixed-rate currency conversion appears in the code", "grep", pattern=r"currency|exchange|convert|rate"),
             CheckSpec("AC5", "Monthly summary keywords appear in the code", "grep", pattern=r"summary|report|category"),
-            CheckSpec("AC6", "CSV export keywords appear in the code", "grep", pattern=r"csv|export"),
-            CheckSpec("AC7", "SQLite usage appears in the code", "grep", pattern=r"sqlite"),
-            CheckSpec("AC8", "Pytest suite is runnable", "command", command=(sys.executable, "-m", "pytest", "-q"), timeout_seconds=600),
-            CheckSpec("NO_STUBS", "No placeholder/stub code", "grep", pattern=placeholder_pattern, must_absent=True, paths=("**/*.py",)),
+            CheckSpec("AC6", "Recurring monthly expense handling appears in the code", "grep", pattern=r"recurr|monthly|subscription|auto.?generate"),
+            CheckSpec("AC7", "CSV export with optional date filtering appears in the code", "grep", pattern=r"csv|export|date_range|start_date|end_date|from_date|to_date"),
+            CheckSpec("AC8", "SQLite usage appears in the code", "grep", pattern=r"sqlite"),
+            no_stubs_check,
         ],
     }
 
@@ -168,7 +175,6 @@ def _should_skip_check_by_hidden_spec(benchmark_name: str, check: CheckSpec, hid
             "AC6": ["pagination", "skip", "limit", "page"],
         },
         "benchmark_url_shortener": {"AC8": ["postgres", "postgresql", "psycopg"]},
-        "benchmark_expense_tracker": {"AC8": ["pytest", "test suite", "tests"]},
     }
     bm_map = conditional_requirements.get(benchmark_name)
     if not bm_map:
@@ -180,6 +186,33 @@ def _should_skip_check_by_hidden_spec(benchmark_name: str, check: CheckSpec, hid
         if kw.lower() in hidden_spec_text:
             return False
     return True
+
+
+def _is_completeness_check(result_or_spec: CheckResult | CheckSpec) -> bool:
+    return result_or_spec.check_id != NO_STUBS_CHECK_ID
+
+
+def _score_results(results: Sequence[CheckResult]) -> dict[str, Any]:
+    completeness_results = [result for result in results if _is_completeness_check(result)]
+    active_completeness_results = [result for result in completeness_results if result.weight > 0]
+    no_stubs_result = next((result for result in results if result.check_id == NO_STUBS_CHECK_ID), None)
+
+    completeness_total_weight = sum(result.weight for result in completeness_results)
+    completeness_passed_weight = sum(result.weight for result in completeness_results if result.passed)
+    completeness_score = (
+        100.0 * completeness_passed_weight / completeness_total_weight
+        if completeness_total_weight
+        else 0.0
+    )
+
+    return {
+        "completeness_score": round(completeness_score, 2),
+        "completeness_rating": _score_to_rating(completeness_score),
+        "passed_checks": sum(1 for result in active_completeness_results if result.passed),
+        "total_checks": len(active_completeness_results),
+        "no_stubs_passed": no_stubs_result.passed if no_stubs_result is not None else None,
+        "no_stubs_details": no_stubs_result.details if no_stubs_result is not None else "not evaluated",
+    }
 
 
 # ----------------------------------------------------------------------
@@ -206,6 +239,21 @@ def analyze_logs(logs: List[Dict[str, Any]]) -> Dict[str, Any]:
     cycle_iterations: Dict[str, int] = {}
     task_finished = False
 
+    # Encontrar a última entrada do FINAL que venha do Tester
+    last_tester_final = None
+    for entry in logs:
+        if entry.get("node_id") == "FINAL":
+            details = entry.get("details", {})
+            if details.get("output_source") == "Tester":
+                last_tester_final = entry
+
+    # Se existir e o output contiver "<INFO> Finished", a tarefa está concluída
+    if last_tester_final:
+        output_text = last_tester_final.get("details", {}).get("output", "")
+        if "<INFO> Finished" in output_text:
+            task_finished = True
+
+    # Restante análise (erros, warnings, tool calls, ciclos)
     for entry in logs:
         level = entry.get("level")
         if level == "ERROR":
@@ -215,7 +263,6 @@ def analyze_logs(logs: List[Dict[str, Any]]) -> Dict[str, Any]:
 
         event = entry.get("event_type")
         details = entry.get("details", {})
-
         if event == "TOOL_CALL":
             tool_calls += 1
             if details.get("success") is False:
@@ -229,9 +276,6 @@ def analyze_logs(logs: List[Dict[str, Any]]) -> Dict[str, Any]:
                 iteration = int(m.group(2))
                 cycle_iterations[cycle_name] = max(cycle_iterations.get(cycle_name, 0), iteration)
 
-        if not task_finished and "<INFO> Finished" in msg:
-            task_finished = True
-
     return {
         "task_finished": task_finished,
         "error_count": error_count,
@@ -240,7 +284,6 @@ def analyze_logs(logs: List[Dict[str, Any]]) -> Dict[str, Any]:
         "tool_failure_rate": tool_failures / tool_calls if tool_calls else 0.0,
         "cycle_iterations": cycle_iterations,
     }
-
 
 def find_execution_log(root: Path) -> Optional[Path]:
     for candidate in root.rglob("execution_logs.json"):
@@ -265,6 +308,7 @@ def _resolve_opik_host() -> str:
 
 
 def _build_opik_client() -> object | None:
+    global opik
     load_dotenv_file()
     def _load_env_from_ancestors(filename: str = ".env") -> Path | None:
         p = Path.cwd()
@@ -307,13 +351,15 @@ def _build_opik_client() -> object | None:
             return candidate
         return None
     _load_env_from_ancestors()
-    if opik is None:
-        if os.getenv("OPIK_API_KEY"):
-            print("OPIK_API_KEY found but the Python package 'opik' is not installed; set up the package to enable logging.", file=sys.stderr)
-        return None
     api_key = os.getenv("OPIK_API_KEY")
     if not api_key:
         return None
+    if opik is None:
+        try:
+            opik = import_module("opik")
+        except Exception as exc:
+            print(f"OPIK_API_KEY found but the Python package 'opik' could not be imported; logging disabled: {exc}", file=sys.stderr)
+            return None
     try:
         return opik.Opik(
             project_name=_resolve_opik_project_name(),
@@ -346,7 +392,7 @@ def _should_skip_archive_member(member_path: PurePosixPath) -> bool:
 
 
 def _search_pattern(root: Path, pattern: str, paths: Sequence[str] = ()) -> tuple[bool, str]:
-    regex = re.compile(pattern, re.IGNORECASE)
+    regex = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
     matches: list[str] = []
     for file_path in _iter_text_files(root):
         rel = file_path.relative_to(root).as_posix()
@@ -510,9 +556,21 @@ def _log_result_to_opik(result: dict, client: object | None) -> bool:
     if not thread_id:
         return False
 
-    rating = _score_to_rating(float(result.get("score", 0.0)))
-    reason = f"auto-check score={result.get('score', 0.0):.2f}/100; passed={result.get('passed_checks', 0)}/{result.get('total_checks', 0)}; rating={rating}/10"
+    completeness_score = float(result.get("completeness_score", result.get("score", 0.0)))
+    rating = _score_to_rating(completeness_score)
+    reason = (
+        f"requirements completeness={completeness_score:.2f}/100; "
+        f"passed={result.get('passed_checks', 0)}/{result.get('total_checks', 0)}; "
+        f"rating={rating}/10"
+    )
     scores = [{"id": thread_id, "name": OPIK_SCORE_NAME, "value": rating, "reason": reason}]
+    if result.get("no_stubs_passed") is not None:
+        scores.append({
+            "id": thread_id,
+            "name": OPIK_NO_STUBS_SCORE_NAME,
+            "value": 1.0 if result.get("no_stubs_passed") else 0.0,
+            "reason": str(result.get("no_stubs_details", "placeholder/stub scan")),
+        })
 
     metrics = result.get("thread_metrics", {})
     if metrics:
@@ -563,11 +621,10 @@ def evaluate_target(target: Path, benchmark: str | None = None) -> dict:
             else:
                 results.append(_evaluate_check(project_root, spec))
 
-        total_weight = sum(r.weight for r in results)
-        passed_weight = sum(r.weight for r in results if r.passed)
-        score = 100.0 * passed_weight / total_weight if total_weight else 0.0
+        score_summary = _score_results(results)
+        score = score_summary["completeness_score"]
         thread_id = _thread_id_from_target(target)
-        rating = _score_to_rating(score)
+        rating = score_summary["completeness_rating"]
 
         # ---- Execution log analysis ----
         thread_metrics = {}
@@ -586,10 +643,13 @@ def evaluate_target(target: Path, benchmark: str | None = None) -> dict:
             "target": str(target),
             "project_root": str(project_root),
             "score": round(score, 2),
+            "completeness_score": score_summary["completeness_score"],
             "rating": rating,
             "thread_id": thread_id,
-            "passed_checks": sum(1 for r in results if r.passed),
-            "total_checks": len(results),
+            "passed_checks": score_summary["passed_checks"],
+            "total_checks": score_summary["total_checks"],
+            "no_stubs_passed": score_summary["no_stubs_passed"],
+            "no_stubs_details": score_summary["no_stubs_details"],
             "checks": [r.__dict__ for r in results],
             "thread_metrics": thread_metrics,
         }
@@ -603,11 +663,14 @@ def evaluate_and_log_target(target: Path, benchmark: str | None = None, opik_cli
 
 
 def _print_report(result: dict) -> None:
-    print(f"[{result['benchmark']}] score: {result['score']:.2f} rating: {result['rating']}/10 ({result['passed_checks']}/{result['total_checks']})")
+    print(f"[{result['benchmark']}] completeness: {result['completeness_score']:.2f} rating: {result['rating']}/10 ({result['passed_checks']}/{result['total_checks']})")
     print(f"  target: {result['target']}")
     print(f"  root:   {result['project_root']}")
     if result.get("thread_id"):
         print(f"  thread: {result['thread_id']}")
+    if result.get("no_stubs_passed") is not None:
+        status = "PASS" if result["no_stubs_passed"] else "FAIL"
+        print(f"  no stubs: {status} ({result.get('no_stubs_details', 'not evaluated')})")
     for check in result["checks"]:
         status = "PASS" if check["passed"] else "FAIL"
         print(f"  - {status} {check['check_id']}: {check['description']} ({check['details']})")

@@ -591,10 +591,9 @@ def _log_result_to_opik(result: dict, client: object | None) -> bool:
     rating = _score_to_rating(completeness_score)
     reason = (
         f"requirements completeness={completeness_score:.2f}/100; "
-        f"passed={result.get('passed_checks', 0)}/{result.get('total_checks', 0)}; "
-        f"rating={rating}/10"
+        f"passed={result.get('passed_checks', 0)}/{result.get('total_checks', 0)}"
     )
-    scores = [{"id": thread_id, "name": OPIK_SCORE_NAME, "value": rating, "reason": reason}]
+    scores = [{"id": thread_id, "name": OPIK_SCORE_NAME, "value": completeness_score, "reason": reason}]
     if result.get("incomplete_stub_count") is not None:
         incomplete_stub_count = float(result.get("incomplete_stub_count", 0))
         scores.append({
@@ -696,7 +695,7 @@ def evaluate_and_log_target(target: Path, benchmark: str | None = None, opik_cli
 
 
 def _print_report(result: dict) -> None:
-    print(f"[{result['benchmark']}] completeness: {result['completeness_score']:.2f} rating: {result['rating']}/10 ({result['passed_checks']}/{result['total_checks']})")
+    print(f"[{result['benchmark']}] requirements coverage: {result['completeness_score']:.2f}% ({result['passed_checks']}/{result['total_checks']})")
     print(f"  target: {result['target']}")
     print(f"  root:   {result['project_root']}")
     if result.get("thread_id"):

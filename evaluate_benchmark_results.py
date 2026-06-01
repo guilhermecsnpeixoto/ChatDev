@@ -56,6 +56,7 @@ class CheckResult:
     details: str
     weight: float = 1.0
     duration_seconds: float = 0.0
+    match_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -204,6 +205,11 @@ def _score_results(results: Sequence[CheckResult]) -> dict[str, Any]:
         if completeness_total_weight
         else 0.0
     )
+    incomplete_stub_count = (
+        no_stubs_result.match_count
+        if no_stubs_result is not None and no_stubs_result.match_count is not None
+        else None
+    )
 
     return {
         "completeness_score": round(completeness_score, 2),
@@ -212,6 +218,7 @@ def _score_results(results: Sequence[CheckResult]) -> dict[str, Any]:
         "total_checks": len(active_completeness_results),
         "no_stubs_passed": no_stubs_result.passed if no_stubs_result is not None else None,
         "no_stubs_details": no_stubs_result.details if no_stubs_result is not None else "not evaluated",
+        "incomplete_stub_count": incomplete_stub_count,
     }
 
 
@@ -391,9 +398,11 @@ def _should_skip_archive_member(member_path: PurePosixPath) -> bool:
     return any(part in skip_parts for part in member_path.parts)
 
 
-def _search_pattern(root: Path, pattern: str, paths: Sequence[str] = ()) -> tuple[bool, str]:
+def _search_pattern_matches(root: Path, pattern: str, paths: Sequence[str] = ()) -> tuple[int, str]:
     regex = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
-    matches: list[str] = []
+    matched_files: list[str] = []
+    examples: list[str] = []
+    match_count = 0
     for file_path in _iter_text_files(root):
         rel = file_path.relative_to(root).as_posix()
         if not _matches_any(rel, paths):
@@ -402,12 +411,28 @@ def _search_pattern(root: Path, pattern: str, paths: Sequence[str] = ()) -> tupl
             content = file_path.read_text(encoding="utf-8", errors="ignore")
         except Exception:
             continue
-        if regex.search(content):
-            matches.append(rel)
-            if len(matches) >= 5:
+        file_matches = list(regex.finditer(content))
+        if not file_matches:
+            continue
+        match_count += len(file_matches)
+        matched_files.append(rel)
+        for match in file_matches:
+            if len(examples) >= 5:
                 break
-    if matches:
-        return True, f"matched in: {', '.join(matches)}"
+            line_number = content.count("\n", 0, match.start()) + 1
+            line = content.splitlines()[line_number - 1].strip()
+            examples.append(f"{rel}:{line_number}: {line}")
+    if match_count:
+        suffix = f"; examples: {'; '.join(examples)}" if examples else ""
+        return match_count, f"{match_count} match(es) in: {', '.join(matched_files[:5])}{suffix}"
+    return 0, f"pattern not found: {pattern}"
+
+
+def _search_pattern(root: Path, pattern: str, paths: Sequence[str] = ()) -> tuple[bool, str]:
+    match_count, details = _search_pattern_matches(root, pattern, paths)
+    if match_count:
+        matched_part = details.split("; examples:", 1)[0]
+        return True, matched_part.replace(f"{match_count} match(es)", "matched")
     return False, f"pattern not found: {pattern}"
 
 
@@ -443,15 +468,20 @@ def _evaluate_check(root: Path, spec: CheckSpec) -> CheckResult:
     started = perf_counter()
     passed = False
     details = ""
+    match_count: int | None = None
     if spec.kind == "file_exists":
         passed, details = _check_file_exists(root, spec.paths)
     elif spec.kind == "grep":
         if not spec.pattern:
             raise ValueError(f"missing pattern for {spec.check_id}")
-        passed, details = _search_pattern(root, spec.pattern, spec.paths)
         if spec.must_absent:
-            passed = not passed
-            details = "pattern absent" if passed else details
+            match_count, details = _search_pattern_matches(root, spec.pattern, spec.paths)
+            passed = match_count == 0
+            details = "0 incomplete stubs found" if passed else details
+        else:
+            passed, details = _search_pattern(root, spec.pattern, spec.paths)
+        if spec.must_absent:
+            match_count = 0 if match_count is None else match_count
     elif spec.kind == "command":
         if not spec.command:
             raise ValueError(f"missing command for {spec.check_id}")
@@ -468,6 +498,7 @@ def _evaluate_check(root: Path, spec: CheckSpec) -> CheckResult:
         details=details,
         weight=spec.weight,
         duration_seconds=duration,
+        match_count=match_count,
     )
 
 
@@ -564,12 +595,13 @@ def _log_result_to_opik(result: dict, client: object | None) -> bool:
         f"rating={rating}/10"
     )
     scores = [{"id": thread_id, "name": OPIK_SCORE_NAME, "value": rating, "reason": reason}]
-    if result.get("no_stubs_passed") is not None:
+    if result.get("incomplete_stub_count") is not None:
+        incomplete_stub_count = float(result.get("incomplete_stub_count", 0))
         scores.append({
             "id": thread_id,
             "name": OPIK_NO_STUBS_SCORE_NAME,
-            "value": 1.0 if result.get("no_stubs_passed") else 0.0,
-            "reason": str(result.get("no_stubs_details", "placeholder/stub scan")),
+            "value": incomplete_stub_count,
+            "reason": f"{incomplete_stub_count:.0f} incomplete stub(s); {result.get('no_stubs_details', 'placeholder/stub scan')}",
         })
 
     metrics = result.get("thread_metrics", {})
@@ -650,6 +682,7 @@ def evaluate_target(target: Path, benchmark: str | None = None) -> dict:
             "total_checks": score_summary["total_checks"],
             "no_stubs_passed": score_summary["no_stubs_passed"],
             "no_stubs_details": score_summary["no_stubs_details"],
+            "incomplete_stub_count": score_summary["incomplete_stub_count"],
             "checks": [r.__dict__ for r in results],
             "thread_metrics": thread_metrics,
         }
@@ -669,8 +702,9 @@ def _print_report(result: dict) -> None:
     if result.get("thread_id"):
         print(f"  thread: {result['thread_id']}")
     if result.get("no_stubs_passed") is not None:
+        count = result.get("incomplete_stub_count")
         status = "PASS" if result["no_stubs_passed"] else "FAIL"
-        print(f"  no stubs: {status} ({result.get('no_stubs_details', 'not evaluated')})")
+        print(f"  incomplete stubs: {count} ({status}; {result.get('no_stubs_details', 'not evaluated')})")
     for check in result["checks"]:
         status = "PASS" if check["passed"] else "FAIL"
         print(f"  - {status} {check['check_id']}: {check['description']} ({check['details']})")
